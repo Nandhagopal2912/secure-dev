@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
 	"strings"
 
@@ -100,6 +101,28 @@ func NormalizeLocation(p string) string {
 	p = strings.TrimPrefix(p, "./")
 	p = strings.TrimPrefix(p, "/")
 	return p
+}
+
+// EndpointTargetPath reduces a scan's target URL to the part that says which page
+// it looked at: the path, in the form NormalizeLocation gives it, without origin,
+// query, or fragment. The site root is the empty string.
+//
+// Reports false when the value is not a usable URL. Exported so that deciding
+// whether two website scans looked at the same page uses the one normalization
+// identity already does, and cannot come to disagree with it (ADR 042).
+func EndpointTargetPath(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Hostname() == "" {
+		return "", false
+	}
+	if u.Path == "" {
+		return "", true
+	}
+	return NormalizeLocation(u.Path), true
 }
 
 // normalizeRuleID lowercases and trims a scanner's rule identifier. Case is not

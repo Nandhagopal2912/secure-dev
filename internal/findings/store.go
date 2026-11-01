@@ -8,6 +8,7 @@ package findings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -199,10 +200,11 @@ func upsertFinding(
 //
 // A website scan has one more condition, for the same reason. It looks at the URL
 // it was given, not at the whole target, so a clean scan of /login says nothing
-// about a finding from a scan of /api/account. Such a finding resolves only when a
-// scan that reported it targeted the same path as this one (ADR 042). Only the
-// path is compared, because preview hostnames churn (ADR 026). Other target kinds
-// read their whole target every time and are unaffected.
+// about a finding from a scan of /api/account. See findingsThisScanLookedAt.
+//
+// Only website scans have this condition today. Other kinds keep the rule above,
+// which has the same gap in another form: scanning image B can resolve findings
+// from image A, because nothing here compares the two targets (ADR 042).
 func resolveUnreported(
 	ctx context.Context, tx pgx.Tx, projectID, scanID string,
 	completeScanners []string, at time.Time,
@@ -211,19 +213,15 @@ func resolveUnreported(
 		return nil
 	}
 
+	limited, eligible, err := findingsThisScanLookedAt(ctx, tx, projectID, scanID)
+	if err != nil {
+		return err
+	}
+	if limited && len(eligible) == 0 {
+		return nil
+	}
+
 	rows, err := tx.Query(ctx, `
-		-- The one place a scan's target path is worked out, so the two sides of
-		-- the comparison below cannot disagree. NULL when there is no URL, which
-		-- compares equal to nothing and so resolves nothing.
-		WITH scan_paths AS (
-		    SELECT id,
-		           target ->> 'kind' AS kind,
-		           rtrim(split_part(split_part(
-		               regexp_replace(target ->> 'endpoint_url', '^[A-Za-z][A-Za-z0-9+.-]*://[^/?#]*', ''),
-		               '?', 1), '#', 1), '/') AS path
-		      FROM scans
-		     WHERE project_id = $1
-		)
 		UPDATE findings f
 		   SET status = 'resolved'
 		 WHERE f.project_id = $1
@@ -240,20 +238,10 @@ func resolveUnreported(
 		       SELECT 1 FROM finding_occurrences o
 		        WHERE o.finding_id = f.id AND NOT (o.scanner = ANY($2))
 		   )
-		   -- And a website scan must have looked at a URL that reported it.
-		   AND (
-		       NOT EXISTS (
-		           SELECT 1 FROM scan_paths cur WHERE cur.id = $3 AND cur.kind = 'endpoint'
-		       )
-		       OR EXISTS (
-		           SELECT 1 FROM finding_occurrences o
-		             JOIN scan_paths prior ON prior.id = o.scan_id
-		             JOIN scan_paths cur ON cur.id = $3
-		            WHERE o.finding_id = f.id AND prior.path = cur.path
-		       )
-		   )
+		   -- And, for a website scan, it must be something this scan looked at.
+		   AND (NOT $4::boolean OR f.id::text = ANY($5::text[]))
 		RETURNING f.id, f.status`,
-		projectID, completeScanners, scanID)
+		projectID, completeScanners, scanID, limited, eligible)
 	if err != nil {
 		return fmt.Errorf("resolve unreported findings: %w", err)
 	}
@@ -281,6 +269,75 @@ func resolveUnreported(
 		}
 	}
 	return nil
+}
+
+// findingsThisScanLookedAt says which open findings a website scan is entitled to
+// resolve: those whose most recent report came from a scan of the same URL path.
+//
+// Most recent, rather than any earlier one, because a finding two URLs have reported
+// may only be reachable from one of them now, and the other coming back clean would
+// be a false "fixed". Only the path is compared, because preview hostnames churn
+// (ADR 026). limited is false for any other kind of scan, which has no such
+// condition. A scan with no usable URL is limited and entitled to nothing.
+//
+// Compared here rather than in SQL so that it uses the normalization identity uses,
+// and so that a scan of any other kind costs one read (ADR 042).
+func findingsThisScanLookedAt(
+	ctx context.Context, tx pgx.Tx, projectID, scanID string,
+) (limited bool, eligible []string, err error) {
+	var kind, target *string
+	err = tx.QueryRow(ctx, `
+		SELECT target ->> 'kind', target ->> 'endpoint_url' FROM scans WHERE id = $1`,
+		scanID).Scan(&kind, &target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, fmt.Errorf("read scan target: %w", err)
+	}
+	if kind == nil || *kind != string(scanners.KindEndpoint) {
+		return false, nil, nil
+	}
+	if target == nil {
+		return true, nil, nil
+	}
+	current, ok := normalization.EndpointTargetPath(*target)
+	if !ok {
+		return true, nil, nil
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT DISTINCT ON (o.finding_id) o.finding_id::text, s.target ->> 'endpoint_url'
+		  FROM finding_occurrences o
+		  JOIN findings f ON f.id = o.finding_id
+		  JOIN scans s ON s.id = o.scan_id
+		 WHERE f.project_id = $1
+		   AND f.status IN ('open', 'reopened')
+		   AND o.scan_id <> $2
+		 ORDER BY o.finding_id, o.seen_at DESC, s.created_at DESC`,
+		projectID, scanID)
+	if err != nil {
+		return true, nil, fmt.Errorf("read finding targets: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		var reportedFrom *string
+		if err := rows.Scan(&id, &reportedFrom); err != nil {
+			return true, nil, fmt.Errorf("read finding targets: %w", err)
+		}
+		if reportedFrom == nil {
+			continue
+		}
+		if path, ok := normalization.EndpointTargetPath(*reportedFrom); ok && path == current {
+			eligible = append(eligible, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return true, nil, fmt.Errorf("read finding targets: %w", err)
+	}
+	return true, eligible, nil
 }
 
 func recordTransition(

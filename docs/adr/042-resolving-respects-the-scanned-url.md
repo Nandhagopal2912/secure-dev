@@ -24,22 +24,23 @@ false "fixed" is worse than a stale open finding.
 ## Decision
 
 For a scan whose target kind is `endpoint`, a finding is additionally eligible to resolve
-only if a scan that reported it **targeted the same URL path** as this one.
+only if the scan that **most recently reported it targeted the same URL path** as this one.
 
 - **The comparison is of scan targets, not of finding locations.** A ZAP scan starting at `/`
   may report a finding on `/login`. Rescanning `/` can resolve it, because that is the scan
   that could find it again. A scan starting at `/login` cannot.
 - **Only the path counts.** Origin and query are removed for the reasons ADR 026 gives: preview
-  hostnames churn, and queries are per-request noise. A trailing slash is ignored.
-- **Any earlier target is enough.** If `/` and `/login` both reported a finding, a clean rescan
-  of either can resolve it. Requiring all of them would leave findings open whenever a project
-  stops scanning one URL.
+  hostnames churn, and queries are per-request noise. The path goes through `NormalizeLocation`,
+  the same normalization identity uses, so `/api//account` and `/api/account/` are one page.
+- **The most recent reporter decides.** If `/a` and then `/b` reported a finding, a clean scan of
+  `/a` proves little, since its crawl may no longer reach that page. A clean scan of `/b` closes
+  it. Requiring every reporter would leave findings open whenever a project stops scanning one.
 - **Every other target kind behaves exactly as before,** including a stored scan with no target.
 - **If a path cannot be worked out, nothing is resolved,** which is the conservative direction.
 
 No schema change is needed. `scans.target` has held what each scan pointed at since migration
-0003, and `finding_occurrences` already says which scans reported a finding. The path is derived
-in one place in the query, so the two sides of the comparison cannot disagree.
+0003, and `finding_occurrences` already says which scans reported a finding. The comparison is
+in Go, so it shares that normalization, and any other kind of scan pays only for one read.
 
 ## Alternatives considered
 
@@ -48,6 +49,12 @@ forgets gets a false "fixed" with no warning.
 
 **Never auto-resolving website findings.** Cannot be falsely fixed, and real fixes would stay open
 until a person closes them, which teaches people to ignore the list.
+
+**Letting any earlier reporter resolve it.** The first draft of this ADR. Simpler, and it brings
+back a false "fixed" whenever a finding is reachable from only one of the URLs that reported it.
+
+**Comparing paths in SQL.** Also the first draft. It worked out the path a second way, which
+disagreed with identity on paths like `/api//account`, and it ran over every scan in the project.
 
 **Comparing each finding's own location to the target.** Wrong for ZAP, which reports on pages other
 than the one it started from, so its findings would almost never resolve.
@@ -67,10 +74,20 @@ that URL was looked at again.
 **What becomes harder.** A finding stays open until its URL is scanned again. Fixing a problem and never
 rescanning that URL leaves it open. That is a visible state, and rescanning clears it.
 
+A URL that can no longer be scanned is harder still. If a host is retired, scans of it fail rather than
+complete, so its findings never close by themselves, and they keep counting toward the score and the gate.
+ADR 024 forbids a person setting `resolved`, so the only way out is marking them `ignored` or `false_positive`,
+neither of which is quite what happened. A way to retire a target is a separate decision.
+
 **ZAP changes too, on purpose.** It had a milder form of the same bug.
 
 **What this does not solve.**
 
+- **Other target kinds have the same gap.** Nothing compares targets for them. Scanning image B in a project
+  can resolve findings from image A, because trivy completed and did not report them. A repository scan can
+  resolve trivy's image findings too, and scanning a different repository in one project has the same effect.
+  An earlier draft of this ADR said other kinds were unaffected, and that was wrong. Fixing them changes how
+  every scanner's findings close, so it is left to the project owner.
 - Two real hosts in one project that share a path still count as one target, as they already count as one
   finding under ADR 026. A clean scan of staging's `/login` can resolve a finding from production's `/login`.
 - A rescan of the same URL can still miss a page ZAP's crawl did not reach this time, and resolve a finding
