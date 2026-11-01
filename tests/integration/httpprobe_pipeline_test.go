@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -51,6 +52,15 @@ func runHTTPProbeScan(
 	t *testing.T, pool *pgxpool.Pool, client *goredis.Client, scanID, projectID, target string,
 ) {
 	t.Helper()
+	// What the API stores for a real scan, which resolving reads (ADR 042).
+	encoded, err := json.Marshal(scanners.Target{Kind: scanners.KindEndpoint, EndpointURL: target})
+	if err != nil {
+		t.Fatalf("encode target: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `UPDATE scans SET target = $1 WHERE id = $2`, encoded, scanID); err != nil {
+		t.Fatalf("set target: %v", err)
+	}
+
 	key := "secureops:itest:" + uuid.NewString()
 	t.Cleanup(func() { _ = client.Del(context.Background(), key).Err() })
 
@@ -182,6 +192,17 @@ func TestHTTPProbeThroughThePipeline(t *testing.T) {
 	}
 	if got := findingStates(t, pool, projectID); slices.Contains(got, "high/resolved") {
 		t.Errorf("after an incomplete scan = %v, the CORS finding must not be resolved", got)
+	}
+
+	// A clean scan of another page says nothing about this one (ADR 042).
+	state.Store(2)
+	elsewhere := nextScan(t, pool, projectID)
+	runHTTPProbeScan(t, pool, client, elsewhere, projectID, srv.URL+"/login")
+	if got := scanStatus(t, pool, elsewhere); got != "completed" {
+		t.Errorf("scan of another page status = %q, want completed", got)
+	}
+	if got := findingStates(t, pool, projectID); slices.Contains(got, "high/resolved") {
+		t.Errorf("after a scan of another page = %v, the CORS finding must stay open", got)
 	}
 
 	// Now really fixed, and a scan that can say so.

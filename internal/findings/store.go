@@ -196,6 +196,13 @@ func upsertFinding(
 // from a project's selection leaves that scanner's old findings open rather
 // than silently declaring them fixed. Stale-but-open is a visible state; a
 // false "resolved" is not.
+//
+// A website scan has one more condition, for the same reason. It looks at the URL
+// it was given, not at the whole target, so a clean scan of /login says nothing
+// about a finding from a scan of /api/account. Such a finding resolves only when a
+// scan that reported it targeted the same path as this one (ADR 042). Only the
+// path is compared, because preview hostnames churn (ADR 026). Other target kinds
+// read their whole target every time and are unaffected.
 func resolveUnreported(
 	ctx context.Context, tx pgx.Tx, projectID, scanID string,
 	completeScanners []string, at time.Time,
@@ -205,6 +212,18 @@ func resolveUnreported(
 	}
 
 	rows, err := tx.Query(ctx, `
+		-- The one place a scan's target path is worked out, so the two sides of
+		-- the comparison below cannot disagree. NULL when there is no URL, which
+		-- compares equal to nothing and so resolves nothing.
+		WITH scan_paths AS (
+		    SELECT id,
+		           target ->> 'kind' AS kind,
+		           rtrim(split_part(split_part(
+		               regexp_replace(target ->> 'endpoint_url', '^[A-Za-z][A-Za-z0-9+.-]*://[^/?#]*', ''),
+		               '?', 1), '#', 1), '/') AS path
+		      FROM scans
+		     WHERE project_id = $1
+		)
 		UPDATE findings f
 		   SET status = 'resolved'
 		 WHERE f.project_id = $1
@@ -220,6 +239,18 @@ func resolveUnreported(
 		   AND NOT EXISTS (
 		       SELECT 1 FROM finding_occurrences o
 		        WHERE o.finding_id = f.id AND NOT (o.scanner = ANY($2))
+		   )
+		   -- And a website scan must have looked at a URL that reported it.
+		   AND (
+		       NOT EXISTS (
+		           SELECT 1 FROM scan_paths cur WHERE cur.id = $3 AND cur.kind = 'endpoint'
+		       )
+		       OR EXISTS (
+		           SELECT 1 FROM finding_occurrences o
+		             JOIN scan_paths prior ON prior.id = o.scan_id
+		             JOIN scan_paths cur ON cur.id = $3
+		            WHERE o.finding_id = f.id AND prior.path = cur.path
+		       )
 		   )
 		RETURNING f.id, f.status`,
 		projectID, completeScanners, scanID)
