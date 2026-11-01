@@ -94,6 +94,10 @@ internal/scanners/zap/    DAST against a running application;
                           passive only, with the ADR 026
                           redaction control; runs from the jar
                           in the worker image (ADR 030)         [tested]
+internal/scanners/httpprobe/ DAST the passive scan cannot do:
+                          CORS origin checks and the plain-HTTP
+                          redirect, no external binary, no
+                          payloads (ADR 041)                    [tested]
 internal/scanners/trivy/  IaC + config (ADR 015 line-redaction
                           control); container image vulns from
                           public registries (ADR 025)           [tested]
@@ -179,7 +183,8 @@ docs/adr/         000-template, 001-go-backend, 002-postgresql, 003-redis,
                   035-sbom-component-storage,
                   036-ci-client-and-exit-codes,
                   037-deployment-evidence-from-the-sbom,
-                  038-kubernetes-in-two-steps
+                  038-kubernetes-in-two-steps,
+                  041-http-probe-for-cors-and-https
 docs/architecture/  fingerprinting.md, normalization.md, correlation.md,
                   risk-engine.md, remediation.md, policy.md
 .github/workflows/ci.yml
@@ -407,6 +412,7 @@ and must never branch on a scanner's name.
 | Container | Trivy | container/image vulnerabilities |
 | Repository / IaC / Config | Trivy | misconfiguration, IaC issues |
 | API / DAST | OWASP ZAP | dynamic application testing — **passive only**, no active scanning (ADR 026) |
+| API / DAST | httpprobe (built in) | CORS origin checks and the plain-HTTP redirect, which passive rules cannot observe (ADR 041) |
 | License | Trivy / SBOM ecosystem | license and component visibility |
 
 Every scanner has exactly one clear responsibility. Do not duplicate coverage across

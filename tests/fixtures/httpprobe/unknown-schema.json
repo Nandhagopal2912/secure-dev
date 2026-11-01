@@ -1,0 +1,1 @@
+{"tool":"httpprobe","schema":99,"path":"/","cors":{"probes":[{"kind":"unknown_origin","status":200,"allow_origin":"reflected"}]},"https_redirect":{"status":200,"location_scheme":"none"}}

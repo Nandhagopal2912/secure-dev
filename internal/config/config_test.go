@@ -331,3 +331,14 @@ func TestWorkerValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+// An adapter enforcing the address policy itself has to be given the setting,
+// and the default has to stay the strict one.
+func TestScannerSettingsCarryTheAddressPolicy(t *testing.T) {
+	if (Config{}).Scanners().AllowPrivateTargets {
+		t.Error("private targets must stay refused unless turned on")
+	}
+	if !(Config{AllowPrivateTargets: true}).Scanners().AllowPrivateTargets {
+		t.Error("the deployment's setting did not reach the adapters")
+	}
+}

@@ -16,9 +16,11 @@ package all
 
 import (
 	"github.com/aizen299/secure-dev/internal/config"
+	"github.com/aizen299/secure-dev/internal/netguard"
 	"github.com/aizen299/secure-dev/internal/scanners"
 	"github.com/aizen299/secure-dev/internal/scanners/gitleaks"
 	"github.com/aizen299/secure-dev/internal/scanners/grype"
+	"github.com/aizen299/secure-dev/internal/scanners/httpprobe"
 	"github.com/aizen299/secure-dev/internal/scanners/semgrep"
 	"github.com/aizen299/secure-dev/internal/scanners/syft"
 	"github.com/aizen299/secure-dev/internal/scanners/trivy"
@@ -41,6 +43,7 @@ func Register(registry *scanners.Registry, cfg config.ScannerSettings) {
 		CacheDir:     cfg.TrivyDir,
 		MaxImageSize: cfg.TrivyMaxImageSize,
 	})
+	registry.MustRegister(httpprobe.New(netguard.Policy{AllowPrivate: cfg.AllowPrivateTargets}))
 	// ZAP is the one adapter that scans a running application rather than
 	// bytes at rest. Registered like any other: the registry selects it by
 	// target kind, and nothing here knows what DAST is (§7 rule 4).
