@@ -107,9 +107,11 @@ func NormalizeLocation(p string) string {
 // it looked at: the path, in the form NormalizeLocation gives it, without origin,
 // query, or fragment. The site root is the empty string.
 //
+// EscapedPath rather than Path: decoding would make /files/a%2Fb and /files/a/b look
+// like one page, and a clean scan of one would then close a finding from the other.
+//
 // Reports false when the value is not a usable URL. Exported so that deciding
-// whether two website scans looked at the same page uses the one normalization
-// identity already does, and cannot come to disagree with it (ADR 042).
+// whether two website scans looked at the same page has one derivation (ADR 042).
 func EndpointTargetPath(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -119,10 +121,7 @@ func EndpointTargetPath(raw string) (string, bool) {
 	if err != nil || u.Scheme == "" || u.Hostname() == "" {
 		return "", false
 	}
-	if u.Path == "" {
-		return "", true
-	}
-	return NormalizeLocation(u.Path), true
+	return NormalizeLocation(u.EscapedPath()), true
 }
 
 // normalizeRuleID lowercases and trims a scanner's rule identifier. Case is not

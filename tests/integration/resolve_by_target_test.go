@@ -116,6 +116,7 @@ func TestASimilarPathIsADifferentURL(t *testing.T) {
 		{"a shorter path", "https://site.example.test/api/account", "https://site.example.test/api"},
 		{"the root", "https://site.example.test/api", "https://site.example.test/"},
 		{"case", "https://site.example.test/API", "https://site.example.test/api"},
+		{"an encoded slash", "https://site.example.test/files/a%2Fb", "https://site.example.test/files/a/b"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

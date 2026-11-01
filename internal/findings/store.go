@@ -213,7 +213,7 @@ func resolveUnreported(
 		return nil
 	}
 
-	limited, eligible, err := findingsThisScanLookedAt(ctx, tx, projectID, scanID)
+	limited, eligible, err := findingsThisScanLookedAt(ctx, tx, projectID, scanID, completeScanners)
 	if err != nil {
 		return err
 	}
@@ -283,7 +283,7 @@ func resolveUnreported(
 // Compared here rather than in SQL so that it uses the normalization identity uses,
 // and so that a scan of any other kind costs one read (ADR 042).
 func findingsThisScanLookedAt(
-	ctx context.Context, tx pgx.Tx, projectID, scanID string,
+	ctx context.Context, tx pgx.Tx, projectID, scanID string, completeScanners []string,
 ) (limited bool, eligible []string, err error) {
 	var kind, target *string
 	err = tx.QueryRow(ctx, `
@@ -312,10 +312,11 @@ func findingsThisScanLookedAt(
 		  JOIN findings f ON f.id = o.finding_id
 		  JOIN scans s ON s.id = o.scan_id
 		 WHERE f.project_id = $1
+		   AND f.scanner = ANY($3)
 		   AND f.status IN ('open', 'reopened')
 		   AND o.scan_id <> $2
 		 ORDER BY o.finding_id, o.seen_at DESC, s.created_at DESC`,
-		projectID, scanID)
+		projectID, scanID, completeScanners)
 	if err != nil {
 		return true, nil, fmt.Errorf("read finding targets: %w", err)
 	}

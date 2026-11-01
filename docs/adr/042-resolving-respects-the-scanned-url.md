@@ -30,8 +30,9 @@ only if the scan that **most recently reported it targeted the same URL path** a
   may report a finding on `/login`. Rescanning `/` can resolve it, because that is the scan
   that could find it again. A scan starting at `/login` cannot.
 - **Only the path counts.** Origin and query are removed for the reasons ADR 026 gives: preview
-  hostnames churn, and queries are per-request noise. The path goes through `NormalizeLocation`,
-  the same normalization identity uses, so `/api//account` and `/api/account/` are one page.
+  hostnames churn, and queries are per-request noise. The escaped path goes through
+  `NormalizeLocation`, so `/api//account` and `/api/account/` are one page, while `/files/a%2Fb`
+  and `/files/a/b` stay two.
 - **The most recent reporter decides.** If `/a` and then `/b` reported a finding, a clean scan of
   `/a` proves little, since its crawl may no longer reach that page. A clean scan of `/b` closes
   it. Requiring every reporter would leave findings open whenever a project stops scanning one.
@@ -74,6 +75,9 @@ that URL was looked at again.
 **What becomes harder.** A finding stays open until its URL is scanned again. Fixing a problem and never
 rescanning that URL leaves it open. That is a visible state, and rescanning clears it.
 
+The most-recent rule has its own cost. If `/a` and then `/b` reported a finding and the project goes back
+to scanning only `/a`, clean scans of `/a` cannot close it, even once it is fixed. Someone has to scan `/b` again.
+
 A URL that can no longer be scanned is harder still. If a host is retired, scans of it fail rather than
 complete, so its findings never close by themselves, and they keep counting toward the score and the gate.
 ADR 024 forbids a person setting `resolved`, so the only way out is marking them `ignored` or `false_positive`,
@@ -90,9 +94,11 @@ neither of which is quite what happened. A way to retire a target is a separate 
   every scanner's findings close, so it is left to the project owner.
 - Two real hosts in one project that share a path still count as one target, as they already count as one
   finding under ADR 026. A clean scan of staging's `/login` can resolve a finding from production's `/login`.
+  Two ports on one host are the same: a clean scan of `:3000/api` can resolve a finding from `:8443/api`.
 - A rescan of the same URL can still miss a page ZAP's crawl did not reach this time, and resolve a finding
   on it. Only a scan of that page itself could tell.
 - Findings already marked resolved are not reopened by this change. The next scan that reports one reopens it.
 
-**Approval.** §24 makes finding lifecycle semantics the project owner's decision. This change was built and
-tested in a fork, and its status stays `Proposed` until the owner has decided.
+**Approval.** Under §24 the project owner decides architecture and the data model, and this changes what
+`resolved` means across the platform, so it is the owner's decision. This change was built and tested in a
+fork, and its status stays `Proposed` until the owner has decided.

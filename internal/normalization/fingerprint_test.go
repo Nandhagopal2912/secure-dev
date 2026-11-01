@@ -39,6 +39,7 @@ func TestEndpointTargetPath(t *testing.T) {
 		{"https://site.test/api//account", "api/account", true},
 		{"https://site.test/api/./account", "api/account", true},
 		{"https://user:pass@site.test/api", "api", true},
+		{"https://site.test/files/a%2Fb", "files/a%2Fb", true},
 		{"https://site.test", "", true},
 		{"https://site.test/", "", true},
 		{"https://site.test/?a=1", "", true},
