@@ -39,7 +39,7 @@ response becomes never dismissing anything.
 
 **2. A person may not set `resolved` or `reopened`.**
 
-These are not opinions. `resolved` means *a scanner stopped reporting this*, and
+These are not opinions. `resolved` means *a scanner stopped reporting this* (for a website scan, on a rescan of the same URL: ADR 042), and
 `reopened` means *a scanner saw it again*. Both are observations, and the
 platform's account of them is only worth anything if it is the platform's.
 

@@ -27,6 +27,35 @@ func secretAt(file string) FingerprintInput {
 	}
 }
 
+func TestEndpointTargetPath(t *testing.T) {
+	cases := []struct {
+		raw, want string
+		ok        bool
+	}{
+		{"https://site.test/api/account", "api/account", true},
+		{"https://pr-1.site.test:8443/api/account", "api/account", true},
+		{"https://site.test/api/account?a=1#top", "api/account", true},
+		{"https://site.test/api/account/", "api/account", true},
+		{"https://site.test/api//account", "api/account", true},
+		{"https://site.test/api/./account", "api/account", true},
+		{"https://user:pass@site.test/api", "api", true},
+		{"https://site.test/files/a%2Fb", "files/a%2Fb", true},
+		{"https://site.test", "", true},
+		{"https://site.test/", "", true},
+		{"https://site.test/?a=1", "", true},
+		{"", "", false},
+		{"   ", "", false},
+		{"not a url", "", false},
+		{"http://[bad", "", false},
+	}
+	for _, tc := range cases {
+		got, ok := EndpointTargetPath(tc.raw)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("EndpointTargetPath(%q) = %q, %v; want %q, %v", tc.raw, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
 func TestFingerprintIsDeterministic(t *testing.T) {
 	// Two separately constructed but equal inputs, not one value compared with
 	// itself: the claim is that equal findings fingerprint equally, which is

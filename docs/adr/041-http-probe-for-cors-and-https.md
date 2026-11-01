@@ -242,12 +242,9 @@ another site. Each can be resolved by fixing it or by scanning the final URL.
 
 **What is not solved, stated plainly:**
 
-- **A clean scan of one path resolves this adapter's findings on other paths.** It checks
-  one URL per scan, while `resolveUnreported` works per project and scanner. A High finding
-  on `/api/account` is marked resolved by a clean scan of `/login` in the same project, and
-  the gate can then pass. The cause is in the store rather than in this adapter, so **it is
-  the project owner's decision**: use one URL per project, or make resolving aware of the
-  target. Until then, this is a real false "fixed".
+- **Resolving depends on rescanning the same URL.** It checks one URL per scan, so a finding
+  closes only when that URL is scanned again. ADR 042 made this so, in place of a clean scan
+  of any URL in the project closing it.
 - **The Kubernetes scan pod still cannot reach a private target.** ADR 039's network policy
   excludes private ranges from the pod's egress, for ZAP as well, whatever this setting
   says. Widening that is a Kubernetes privilege change (§24), so `LoadScanJob` leaves the

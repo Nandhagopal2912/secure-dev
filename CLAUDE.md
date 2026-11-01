@@ -184,7 +184,8 @@ docs/adr/         000-template, 001-go-backend, 002-postgresql, 003-redis,
                   036-ci-client-and-exit-codes,
                   037-deployment-evidence-from-the-sbom,
                   038-kubernetes-in-two-steps,
-                  041-http-probe-for-cors-and-https
+                  041-http-probe-for-cors-and-https,
+                  042-resolving-respects-the-scanned-url
 docs/architecture/  fingerprinting.md, normalization.md, correlation.md,
                   risk-engine.md, remediation.md, policy.md
 .github/workflows/ci.yml
