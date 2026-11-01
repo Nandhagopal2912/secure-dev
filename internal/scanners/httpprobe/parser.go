@@ -148,9 +148,9 @@ func (p corsProbe) incomplete() bool {
 
 // incomplete reports whether this check reached no conclusion.
 //
-// Refused and filtered are conclusions: a visitor cannot get a page from a port
-// that refuses them or ignores them. Every other failure might only be the
-// network.
+// Refused is a conclusion: nothing is listening. Filtered is not quite one, but
+// it does not make the scan incomplete, because it is reported as a finding of
+// its own (ADR 041). Every other failure might only be the network.
 func (r redirectObservation) incomplete() bool {
 	if r.Failure != "" {
 		return r.Failure != failureRefused && r.Failure != failureFiltered

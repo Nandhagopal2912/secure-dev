@@ -107,6 +107,24 @@ var (
 		confidence:  normalization.ConfidenceLow,
 		reference:   refCleartext,
 	}
+	// A note rather than a problem. A silent port 80 is safe if the site's firewall
+	// dropped the connection and unknown if the scanner's own network did, and this
+	// adapter cannot tell which. Marking the whole scan PARTIAL for it would also
+	// cast doubt on CORS results that came back fine, so the doubt is stated here
+	// instead (ADR 041).
+	rulePortUnverified = rule{
+		id:    "http-port-unverified",
+		title: "Plain HTTP could not be checked",
+		description: "HTTPS answered but port 80 did not. If only this site shows this, its firewall " +
+			"is probably blocking port 80, which is safe. If every site shows it, the scanner's own " +
+			"network is probably blocking port 80, and this check has not really run.",
+		remediation: "To confirm, run curl -I http://<host> from another network. If every site " +
+			"shows this, allow outbound port 80 for the scanner and scan again.",
+		cwe:        cweCleartext,
+		severity:   normalization.SeverityInfo,
+		confidence: normalization.ConfidenceLow,
+		reference:  refCleartext,
+	}
 	ruleRedirectTemporary = rule{
 		id:    "http-redirect-temporary",
 		title: "Plain HTTP redirects to HTTPS only temporarily",
@@ -214,6 +232,8 @@ func corsFindings(c corsObservation) []rule {
 // redirectFinding decides what the plain-HTTP observation means.
 func redirectFinding(r redirectObservation) (rule, bool) {
 	switch {
+	case r.Failure == failureFiltered:
+		return rulePortUnverified, true
 	case r.Failure != "":
 		return rule{}, false
 	case r.Status >= 400:

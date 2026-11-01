@@ -15,7 +15,7 @@ hand. No third-party host was contacted to produce any of them, and the
 | `lookalike-and-null.json` | A server that rejects an unknown origin but trusts a lookalike domain and `null`. |
 | `preflight-only.json` | A server that only says it trusts an origin when asked by preflight. |
 | `plain-refused.json` | Nothing listening on port 80. A safe answer, not a failure. |
-| `plain-filtered.json` | Port 80 ignored while HTTPS answered. A safe answer, not a failure. |
+| `plain-filtered.json` | Port 80 ignored while HTTPS answered. Produces a note saying what could not be confirmed, and leaves the scan complete. |
 | `cors-failed.json` | One check failed and the other found something. The finding survives. |
 | `root-path.json` | The site root, which normalizes to nothing and has to stay readable. |
 | `hostile.json` | Written to attack the mapper: traversal in the path and markup where a classification belongs. |

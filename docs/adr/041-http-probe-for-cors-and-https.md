@@ -96,18 +96,24 @@ finding from that case is reported with low confidence.
 | 2xx | **Medium**, `http-served-plain` | A page is readable and changeable on the network path. |
 | 4xx or 5xx | **Low**, low confidence, `http-error-plain` | Something is listening, but nothing shows it serves real content. |
 | Connection refused, HTTPS target | no finding | Nothing is listening, which is safer than any redirect. |
-| Connection times out, HTTPS target that just answered | no finding, recorded as `filtered` | See below. |
+| Connection times out, HTTPS target that just answered | **Info**, low confidence, `http-port-unverified` | See below. |
 
-**A silent port 80 counts as safe when HTTPS just answered.** A firewall that drops
-port 80 sends nothing back, so the connection times out. That site is safe, and
-marking it incomplete would make it `PARTIAL` on every scan, which teaches people to
-ignore `PARTIAL`. It only applies to a timeout while connecting, on a host that
-answered over HTTPS moments earlier. The cost is stated: a brief network fault on
-port 80 could hide a real problem for one scan. Worse, this cannot tell a firewall
-at the target from the worker's own network dropping outbound port 80: a deployment
-whose egress blocks port 80 would record every HTTPS site as `filtered`, on every
-scan, and never report plain HTTP. The record says `filtered`, so the reason is
-visible, but no degradation is raised. **This trade is the project owner's to confirm.**
+**A silent port 80 is reported as a note when HTTPS just answered.** A firewall that
+drops port 80 sends nothing back, so the connection times out. That site is safe. But
+the worker's own network dropping outbound port 80 looks exactly the same, and in that
+case this check has not really run. Calling it safe would hide that, and calling it
+incomplete would make the whole scan `PARTIAL`, casting doubt on CORS results that came
+back fine and teaching people to ignore `PARTIAL`.
+
+So the doubt gets its own finding, `http-port-unverified`, which says what is unknown
+and how to check. If one site shows it, that site's firewall is the likely reason. If
+every site shows it, the scanner's network is. It only applies to a timeout while
+connecting, on a host that answered over HTTPS moments earlier. Severity `info` carries
+a weight of 0.05 in the risk engine, so it does not move a gate.
+
+The cost is stated: a note does not stop anything, so someone has to read it. And since
+the scanner still counts as complete, an open `http-served-plain` finding can be resolved
+if the worker's network later starts blocking port 80, with this note as the only clue.
 
 ### 4. A check that cannot finish is not a pass
 
@@ -206,8 +212,12 @@ policy that does not know what a site is. Following them one at a time keeps tha
 decision in one tested function.
 
 **Treating every port 80 timeout as incomplete.** The first draft too, and the most
-defensible against a false clean. It makes one common, correct firewall setup look broken
-forever.
+defensible against a false clean. It makes one correct firewall setup look broken forever,
+and marks good results from the other check as incomplete along with it.
+
+**Treating a silent port 80 as safe with nothing to show for it.** The second draft. It
+removes the false alarm, and a deployment whose egress blocks port 80 would then report
+every HTTPS site as fine, on every scan, without ever having checked.
 
 **Rating a yes without credentials as Medium or as nothing.** Medium overstates what is
 readable by anyone anyway. Nothing would hide a server whose logic is one setting from

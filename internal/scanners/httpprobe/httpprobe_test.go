@@ -551,6 +551,29 @@ func TestSilentPlainPort(t *testing.T) {
 	}
 }
 
+// The doubt about a silent port is stated on its own, so it neither reads as a
+// pass nor marks good results from the other check as incomplete.
+func TestSilentPlainPortIsANoteAndKeepsTheScanComplete(t *testing.T) {
+	data := fixture(t, "plain-filtered.json")
+	rec, err := parseRecord(data)
+	if err != nil {
+		t.Fatalf("parseRecord: %v", err)
+	}
+	if rec.Redirect.incomplete() {
+		t.Error("a silent port must not mark the scan incomplete")
+	}
+	got, err := Normalize(data, "scan-1")
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if len(got.Findings) != 1 || got.Findings[0].Severity != normalization.SeverityInfo {
+		t.Fatalf("findings = %+v, want one info note", got.Findings)
+	}
+	if !strings.Contains(got.Findings[0].Remediation, "curl -I") {
+		t.Errorf("remediation = %q, want it to say how to check", got.Findings[0].Remediation)
+	}
+}
+
 // Timing out after connecting is a slow server, not a closed port.
 func TestSlowPlainPortIsNotFiltered(t *testing.T) {
 	var err error = &net.OpError{Op: "read", Net: "tcp", Err: fakeTimeout{}}
@@ -974,7 +997,7 @@ func TestNormalizeFixtures(t *testing.T) {
 		{"reflected-temporary-redirect.json", []string{"cors-reflected-origin", "http-redirect-temporary"}},
 		{"wildcard.json", []string{}},
 		{"plain-refused.json", []string{}},
-		{"plain-filtered.json", []string{}},
+		{"plain-filtered.json", []string{"http-port-unverified"}},
 		{"lookalike-and-null.json", []string{"cors-lookalike-origin-credentials", "cors-null-origin"}},
 		{"preflight-only.json", []string{"cors-reflected-origin"}},
 		{"cors-failed.json", []string{"http-served-plain"}},
@@ -1024,6 +1047,7 @@ func TestSeverities(t *testing.T) {
 		{ruleNullWithCredentials, normalization.SeverityHigh, normalization.ConfidenceHigh},
 		{ruleNull, normalization.SeverityLow, normalization.ConfidenceHigh},
 		{rulePlainServed, normalization.SeverityMedium, normalization.ConfidenceHigh},
+		{rulePortUnverified, normalization.SeverityInfo, normalization.ConfidenceLow},
 		{rulePlainError, normalization.SeverityLow, normalization.ConfidenceLow},
 		{ruleRedirectTemporary, normalization.SeverityLow, normalization.ConfidenceHigh},
 		{ruleRedirectPlain, normalization.SeverityLow, normalization.ConfidenceLow},

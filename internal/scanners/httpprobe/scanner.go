@@ -304,9 +304,9 @@ func (s *Scanner) checkRedirect(
 			// is the target. When plain HTTP IS the target, it is just down.
 			obs.Failure = failureNetwork
 		case endpoint.Scheme == "https" && httpsAnswered && obs.Failure == failureConnectTimeout:
-			// The host just answered on HTTPS and ignored this port, which is
-			// what a firewall dropping port 80 looks like. A visitor gets no
-			// page here either (ADR 041).
+			// The host just answered on HTTPS and ignored this port. Probably a
+			// firewall at the site, possibly the scanner's own network, so it
+			// is reported as a note rather than as a pass (ADR 041).
 			obs.Failure = failureFiltered
 		}
 		return obs
