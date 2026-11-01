@@ -57,20 +57,26 @@ type ScannerSettings struct {
 	ZAPCommand        string
 	ZAPJarPath        string
 	ZAPMaxHeap        string
+	// AllowPrivateTargets is the deployment's address policy, for an adapter that
+	// makes its own connections and so enforces it itself (ADR 041). LoadScanJob
+	// leaves it false on purpose: a scan pod's network policy excludes private
+	// ranges whatever this says, so refusing there fails fast and says why.
+	AllowPrivateTargets bool
 }
 
 // Scanners exposes the adapter settings held by a full configuration, so both
 // binaries register adapters from one description.
 func (c Config) Scanners() ScannerSettings {
 	return ScannerSettings{
-		GrypeDBCacheDir:   c.GrypeDBCacheDir,
-		SemgrepDir:        c.SemgrepDir,
-		TrivyDir:          c.TrivyDir,
-		TrivyMaxImageSize: c.TrivyMaxImageSize,
-		ZAPHomeDir:        c.ZAPHomeDir,
-		ZAPCommand:        c.ZAPCommand,
-		ZAPJarPath:        c.ZAPJarPath,
-		ZAPMaxHeap:        c.ZAPMaxHeap,
+		GrypeDBCacheDir:     c.GrypeDBCacheDir,
+		SemgrepDir:          c.SemgrepDir,
+		TrivyDir:            c.TrivyDir,
+		TrivyMaxImageSize:   c.TrivyMaxImageSize,
+		ZAPHomeDir:          c.ZAPHomeDir,
+		ZAPCommand:          c.ZAPCommand,
+		ZAPJarPath:          c.ZAPJarPath,
+		ZAPMaxHeap:          c.ZAPMaxHeap,
+		AllowPrivateTargets: c.AllowPrivateTargets,
 	}
 }
 

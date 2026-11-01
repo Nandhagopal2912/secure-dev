@@ -102,9 +102,11 @@ then this is a documented intent rather than an enforced boundary.
 ### The boundary DAST inverts
 
 Every other adapter, image targets included, **pulls** untrusted content toward
-the worker. ZAP is the only one that sends traffic **outward** to a host
-somebody else operates, which makes SecureOps a potential attack tool rather
-than only a potential victim (ADR 026, T-52).
+the worker. ZAP and httpprobe are the only ones that send traffic **outward** to
+a host somebody else operates, which makes SecureOps a potential attack tool
+rather than only a potential victim (ADR 026, ADR 041, T-52). httpprobe also
+opens those connections from inside the worker process rather than from a
+subprocess (T-64).
 
 The controls run in the other direction accordingly:
 

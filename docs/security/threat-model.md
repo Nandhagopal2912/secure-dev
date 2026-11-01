@@ -1511,6 +1511,25 @@ Note the deliberate exception: `Policy.AllowPrivate` permits internal targets
 for self-hosted deployments that legitimately scan their own network, and cloud
 metadata endpoints stay blocked regardless of that setting.
 
+### T-64 A scanner that opens its own connections · **Mitigated**
+
+Every other adapter is a subprocess. `httpprobe` (ADR 041) makes HTTP requests
+from inside the worker, chosen partly by what a target answers, because the CORS
+check follows same-site redirects. So a hostile target could try to steer the
+worker somewhere, or feed it something oversized.
+
+Every connection goes through `netguard.Policy.ControlFunc`, on the concrete
+address after DNS, so a rebinding name is refused and cloud metadata is refused
+whatever `SECUREOPS_ALLOW_PRIVATE_TARGETS` says. A redirect is followed at most
+three times, only to the same host or its `www.` variant and never from HTTPS down
+to HTTP. The environment's proxy settings are ignored. Response bodies are never
+read, headers are capped, and what is stored is a closed set of classifications,
+so nothing a target sent reaches storage as text (§15.3). Tests cover each of
+these, and each was confirmed by removing the control and watching a test fail.
+
+It sends no attack payloads, so T-52's reasoning holds: each request is one a
+browser could make.
+
 ### T-57 The dashboard sees everything, for everyone · **Mitigated**
 
 The dashboard holds one credential on behalf of every person who opens it.
@@ -1618,7 +1637,7 @@ network by this design and needs no CORS policy for it.
 
 | Status | Count | Notable |
 |---|---|---|
-| Mitigated | 43 | T-01, T-02, T-03, T-05, T-06, T-07, T-10, T-11*, T-12, T-13, T-14, T-15, T-16, T-17, T-24, T-26, T-27, T-29, T-30, T-31, T-34, T-35, T-37, T-39, T-40, T-41, T-42, T-43, T-44, T-45, T-46, T-47, T-49, T-50, T-52, T-53, T-54, T-55, T-56, T-57, T-58, T-61, T-63 |
+| Mitigated | 44 | T-01, T-02, T-03, T-05, T-06, T-07, T-10, T-11*, T-12, T-13, T-14, T-15, T-16, T-17, T-24, T-26, T-27, T-29, T-30, T-31, T-34, T-35, T-37, T-39, T-40, T-41, T-42, T-43, T-44, T-45, T-46, T-47, T-49, T-50, T-52, T-53, T-54, T-55, T-56, T-57, T-58, T-61, T-63, T-64 |
 | Partial | 18 | T-04, T-08, T-09, T-18, T-19, T-20, T-23, T-25, T-28, T-32, T-33, T-36, T-38, T-48, T-51, T-59, T-60, T-62 |
 | Open | 0 | — the first time this row has been empty |
 | Prospective | 2 | T-21, T-22 — no such endpoint exists |

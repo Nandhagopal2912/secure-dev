@@ -454,7 +454,7 @@ cmd/scanjob/      runs one scan and reports it, holding no credentials
 cmd/useradd/      bootstrap the first admin account
 internal/
   scanners/       Scanner contract, Target validation, registry, safe exec
-    gitleaks/ syft/ grype/ semgrep/ trivy/ zap/
+    gitleaks/ syft/ grype/ semgrep/ trivy/ zap/ httpprobe/
   normalization/  raw output -> canonical Finding, fingerprinting, dedup (pure)
   correlation/    contextual issues, cross-domain links (pure)
   risk/           deterministic contextual scoring (pure)

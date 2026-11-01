@@ -30,7 +30,7 @@ the last Open entry and Phase 12a closed it.
 | 1 | Foundation: API, dashboard shell, PostgreSQL, Redis, Compose, CI | done |
 | 2 | Scanner abstraction, target validation, scan lifecycle, worker | done |
 | 3a | Scan API and interim authentication | done |
-| 3b | Six adapters: gitleaks · syft · grype · semgrep · trivy · zap | done |
+| 3b | Six adapters: gitleaks · syft · grype · semgrep · trivy · zap, and later httpprobe (ADR 041) | done |
 | 4 | Normalization: canonical Finding, fingerprinting, dedup, persistence | done |
 | 5 | Correlation: contextual issues, cross-domain escalation | done |
 | 6 | Threat intelligence (EPSS) and the contextual risk engine | done |
