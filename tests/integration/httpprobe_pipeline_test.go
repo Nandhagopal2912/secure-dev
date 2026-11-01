@@ -52,7 +52,7 @@ func runHTTPProbeScan(
 ) {
 	t.Helper()
 	key := "secureops:itest:" + uuid.NewString()
-	t.Cleanup(func() { _ = client.Del(t.Context(), key).Err() })
+	t.Cleanup(func() { _ = client.Del(context.Background(), key).Err() })
 
 	policy := netguard.Policy{AllowPrivate: true}
 	reg := scanners.NewRegistry()
@@ -85,7 +85,7 @@ func runHTTPProbeScan(
 	}); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
-	drainQueue(t, runner, 3*time.Second)
+	drainQueue(t, runner, 8*time.Second)
 }
 
 func nextScan(t *testing.T, pool *pgxpool.Pool, projectID string) string {

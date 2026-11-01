@@ -10,7 +10,7 @@ import type { ScanMode } from "./scan-bar";
 /**
  * Which scanners a scan runs, by what it points at.
  *
- * A website scan runs ZAP and nothing else, so listing the five static
+ * A website scan runs ZAP and httpprobe and nothing else, so listing the five static
  * scanners for one would leave four rows spinning forever and a counter stuck
  * at "0 / 5 reported" -- the progress panel confidently reporting a stall that
  * is not happening. The registry decides this server-side; this mirrors it so
@@ -25,6 +25,7 @@ const SCANNERS: Record<ScanMode, { id: string; label: string; detail: string }[]
     { id: "trivy", label: "Config", detail: "IaC and misconfiguration" },
   ],
   endpoint: [
+    { id: "httpprobe", label: "CORS and HTTPS", detail: "origin and redirect checks" },
     { id: "zap", label: "Passive DAST", detail: "crawl, then passive rules only" },
   ],
 };

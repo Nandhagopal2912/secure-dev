@@ -85,6 +85,9 @@ type redirectObservation struct {
 	Failure        string `json:"failure,omitempty"`
 	Status         int    `json:"status,omitempty"`
 	LocationScheme string `json:"location_scheme,omitempty"`
+	// OtherPort says the answer came from port 80 while the target is on another
+	// port, so it may belong to a different service.
+	OtherPort bool `json:"other_port,omitempty"`
 }
 
 // base is the first probe, the one the other three depend on.
@@ -263,6 +266,11 @@ func (p corsProbe) validate() error {
 		return errors.New("unknown probe kind")
 	}
 	if p.Failure != "" {
+		// No answer means nothing to describe. A record claiming both did not
+		// come from this adapter, and must not produce a finding.
+		if p.Status != 0 || p.AllowOrigin != "" || p.AllowCredentials {
+			return errors.New("failed probe carries an answer")
+		}
 		return validFailure(p.Failure)
 	}
 	if !validStatus(p.Status) {
@@ -279,6 +287,9 @@ func (p corsProbe) validate() error {
 // validate reports the first thing in this observation outside its closed set.
 func (r redirectObservation) validate() error {
 	if r.Failure != "" {
+		if r.Status != 0 || r.LocationScheme != "" {
+			return errors.New("failed check carries an answer")
+		}
 		return validFailure(r.Failure)
 	}
 	if !validStatus(r.Status) {

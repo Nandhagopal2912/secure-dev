@@ -58,7 +58,9 @@ type ScannerSettings struct {
 	ZAPJarPath        string
 	ZAPMaxHeap        string
 	// AllowPrivateTargets is the deployment's address policy, for an adapter that
-	// makes its own connections and so enforces it itself (ADR 041).
+	// makes its own connections and so enforces it itself (ADR 041). LoadScanJob
+	// leaves it false on purpose: a scan pod's network policy excludes private
+	// ranges whatever this says, so refusing there fails fast and says why.
 	AllowPrivateTargets bool
 }
 

@@ -712,9 +712,9 @@ func closedPort(t *testing.T) string {
 
 func TestPlainURL(t *testing.T) {
 	cases := []struct{ target, want string }{
-		{"https://example.test/app?api_key=x", "http://example.test/app"},
-		{"https://example.test:8443/app", "http://example.test/app"},
-		{"https://[2001:db8::1]:8443/app", "http://[2001:db8::1]/app"},
+		{"https://example.test/app?api_key=x", "http://example.test/"},
+		{"https://example.test:8443/reset/token", "http://example.test/"},
+		{"https://[2001:db8::1]:8443/app", "http://[2001:db8::1]/"},
 		{"http://example.test:8080/app?api_key=x", "http://example.test:8080/app"},
 	}
 	for _, tc := range cases {
@@ -755,11 +755,12 @@ func TestRefusedPlainPortIsSafeForAnHTTPSTarget(t *testing.T) {
 }
 
 // The plain check reaches a different port from the HTTPS target, and a finding
-// there is reported against the target's path.
+// there is reported against the target's path. Nothing of the target's URL except
+// its host goes out unencrypted: a path can hold a token as well as a query can.
 func TestPlainPortIsCheckedForAnHTTPSTarget(t *testing.T) {
-	var plainQuery atomic.Value
+	var plainURI atomic.Value
 	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		plainQuery.Store(r.URL.RawQuery)
+		plainURI.Store(r.URL.RequestURI())
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer plain.Close()
@@ -776,8 +777,19 @@ func TestPlainPortIsCheckedForAnHTTPSTarget(t *testing.T) {
 	if got := ruleIDs(t, raw); !slices.Equal(got, []string{"http-served-plain"}) {
 		t.Errorf("rules = %v, want http-served-plain", got)
 	}
-	if got := plainQuery.Load(); got != "" {
-		t.Errorf("plain request carried query %q, want none", got)
+	if got := plainURI.Load(); got != "/" {
+		t.Errorf("plain request asked for %q, want /", got)
+	}
+	got, err := Normalize(raw.Output, "scan-1")
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	// Port 80 of this host may be another service, so the finding says less.
+	if got.Findings[0].Confidence != normalization.ConfidenceLow {
+		t.Errorf("confidence = %s, want low for a target on a custom port", got.Findings[0].Confidence)
+	}
+	if got.Findings[0].Endpoint != "GET app" {
+		t.Errorf("endpoint = %q, want the target's own path", got.Findings[0].Endpoint)
 	}
 }
 
@@ -1135,6 +1147,43 @@ func TestRecordWithoutTheFirstProbeIsReported(t *testing.T) {
 	}
 	if len(got.Errors) != 1 {
 		t.Errorf("errors = %v, want one", got.Errors)
+	}
+}
+
+// A record claiming a request both failed and was answered did not come from
+// this adapter, and neither half may become a finding.
+func TestContradictoryRecordIsReported(t *testing.T) {
+	got, err := Normalize(fixture(t, "failed-with-answer.json"), "scan-1")
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if len(got.Findings) != 0 {
+		t.Errorf("findings = %+v, want none", got.Findings)
+	}
+	if len(got.Errors) != 2 {
+		t.Errorf("errors = %v, want one per check", got.Errors)
+	}
+}
+
+// Once a server has shown it trusts any origin, the other two questions cannot
+// change the finding, so a live site is not asked them.
+func TestTrustingAnyOriginStopsTheQuestions(t *testing.T) {
+	var corsRequests atomic.Int32
+	srv := httptest.NewServer(splitByOrigin(
+		func(w http.ResponseWriter, r *http.Request) {
+			corsRequests.Add(1)
+			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+			w.WriteHeader(http.StatusOK)
+		},
+		redirectTo(http.StatusMovedPermanently, "https://example.test/"),
+	))
+	defer srv.Close()
+
+	if _, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL)); err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if got := corsRequests.Load(); got != 2 {
+		t.Errorf("CORS requests = %d, want the first question and the preflight", got)
 	}
 }
 

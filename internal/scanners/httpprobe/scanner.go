@@ -183,6 +183,11 @@ func (s *Scanner) checkCORS(ctx context.Context, client *http.Client, endpoint *
 	}
 
 	obs.Probes = append(obs.Probes, s.probe(ctx, client, http.MethodOptions, page, kindPreflight, probeOrigin))
+	// A server that trusts any origin also trusts these two, and that is one
+	// mistake. Asking a live site again would change no finding.
+	if base.AllowOrigin == allowOriginReflected {
+		return obs
+	}
 	if origin, ok := lookalikeOrigin(page); ok {
 		obs.Probes = append(obs.Probes, s.probe(ctx, client, http.MethodGet, page, kindLookalikeOrigin, origin))
 	}
@@ -308,19 +313,32 @@ func (s *Scanner) checkRedirect(
 	}
 	obs.Status = status
 	obs.LocationScheme = classifyLocation(header.Get("Location"))
+	obs.OtherPort = servesFromOtherPort(endpoint)
 	return obs
+}
+
+// servesFromOtherPort reports whether the plain-HTTP answer may come from a
+// different service than the target: an HTTPS target on a custom port says
+// nothing about what owns port 80 of its host.
+func servesFromOtherPort(endpoint *url.URL) bool {
+	port := endpoint.Port()
+	return endpoint.Scheme == "https" && port != "" && port != "443"
 }
 
 // plainURL is the address a visitor reaches by typing http://.
 //
 // The query is dropped even though the target's own query is kept for the CORS
 // check: it is where applications carry credentials, and this request would
-// send them unencrypted. A probe must not cause the exposure it looks for.
+// send them unencrypted. For an HTTPS target the path goes too, because a path
+// can carry a token just as a query can, and whether plain HTTP redirects is a
+// question about the host. A probe must not cause the exposure it looks for.
 func (s *Scanner) plainURL(endpoint *url.URL) string {
 	plain := *endpoint
 	plain.RawQuery = ""
 	if endpoint.Scheme == "https" {
 		plain.Scheme = "http"
+		plain.Path = "/"
+		plain.RawPath = ""
 		plain.Host = hostForPort(endpoint.Hostname(), s.plainPort)
 	}
 	return plain.String()

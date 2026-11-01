@@ -82,8 +82,11 @@ equal to what was sent.
 
 Send `GET` to the plain address. For an `https://` target that is port 80 of the same
 host, whatever port the target itself uses, because that is where a browser goes for
-`http://host`. For an `http://` target it is the target itself, so an HTTP-only
-endpoint needs no special path: it simply reports what it serves.
+`http://host`, and the path is `/`. For an `http://` target it is the target itself, so
+an HTTP-only endpoint needs no special path: it simply reports what it serves.
+
+An HTTPS target on a custom port says nothing about who owns port 80 of its host, so a
+finding from that case is reported with low confidence.
 
 | Answer | Result | Why |
 |---|---|---|
@@ -100,8 +103,11 @@ port 80 sends nothing back, so the connection times out. That site is safe, and
 marking it incomplete would make it `PARTIAL` on every scan, which teaches people to
 ignore `PARTIAL`. It only applies to a timeout while connecting, on a host that
 answered over HTTPS moments earlier. The cost is stated: a brief network fault on
-port 80 could hide a real problem for one scan. The record says `filtered`, so the
-reason is visible, and the next scan asks again.
+port 80 could hide a real problem for one scan. Worse, this cannot tell a firewall
+at the target from the worker's own network dropping outbound port 80: a deployment
+whose egress blocks port 80 would record every HTTPS site as `filtered`, on every
+scan, and never report plain HTTP. The record says `filtered`, so the reason is
+visible, but no degradation is raised. **This trade is the project owner's to confirm.**
 
 ### 4. A check that cannot finish is not a pass
 
@@ -150,10 +156,11 @@ connection, so:
 ### 6. The adapter holds and sends no credentials
 
 Credentials typed into a target URL (`https://user:pass@host`) are removed, because Go
-would otherwise turn them into an `Authorization` header (§14.7). The plain-HTTP
-request also drops the target's query string, the place applications carry credentials,
-because sending it would create the very exposure being looked for. The HTTPS request
-keeps it, since the endpoint may need it and it is encrypted.
+would otherwise turn them into an `Authorization` header (§14.7). For an HTTPS target, the
+plain-HTTP request also drops the target's path and query, because either can carry a token
+and sending them unencrypted would create the very exposure being looked for. For an
+`http://` target it drops the query and keeps the path, since that is the address given.
+The HTTPS request keeps both, since the endpoint may need them and they are encrypted.
 
 ### 7. Raw output is a record the adapter writes itself
 
@@ -225,6 +232,12 @@ another site. Each can be resolved by fixing it or by scanning the final URL.
 
 **What is not solved, stated plainly:**
 
+- **A clean scan of one path resolves this adapter's findings on other paths.** It checks
+  one URL per scan, while `resolveUnreported` works per project and scanner. A High finding
+  on `/api/account` is marked resolved by a clean scan of `/login` in the same project, and
+  the gate can then pass. The cause is in the store rather than in this adapter, so **it is
+  the project owner's decision**: use one URL per project, or make resolving aware of the
+  target. Until then, this is a real false "fixed".
 - **The Kubernetes scan pod still cannot reach a private target.** ADR 039's network policy
   excludes private ranges from the pod's egress, for ZAP as well, whatever this setting
   says. Widening that is a Kubernetes privilege change (§24), so `LoadScanJob` leaves the

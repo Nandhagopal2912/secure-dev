@@ -20,6 +20,7 @@ hand. No third-party host was contacted to produce any of them, and the
 | `root-path.json` | The site root, which normalizes to nothing and has to stay readable. |
 | `hostile.json` | Written to attack the mapper: traversal in the path and markup where a classification belongs. |
 | `no-base-probe.json` | A record that never asked the first question, which must not read as clean. |
+| `failed-with-answer.json` | A record claiming a request both failed and was answered. Neither half may become a finding. |
 | `path-with-query.json` | A credential in the stored path, which this adapter can never write. Refused. |
 | `unknown-schema.json` | A record format this version does not understand. |
 | `wrong-tool.json` | Valid JSON from something else. |

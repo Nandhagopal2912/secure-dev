@@ -158,6 +158,9 @@ func Normalize(data []byte, scanID string) (normalization.Result, error) {
 	if err := rec.Redirect.validate(); err != nil {
 		out.Errors = append(out.Errors, "https_redirect: "+err.Error())
 	} else if r, found := redirectFinding(rec.Redirect); found {
+		if rec.Redirect.OtherPort {
+			r.confidence = normalization.ConfidenceLow
+		}
 		appendFinding(&out, r, path, scanID)
 	}
 	return out, nil

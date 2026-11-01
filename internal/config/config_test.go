@@ -332,6 +332,19 @@ func TestWorkerValidationErrors(t *testing.T) {
 	}
 }
 
+// A scan pod cannot reach a private range whatever this says (ADR 039), so a
+// setting meant for the worker must not make its adapters claim otherwise.
+func TestScanJobStaysStrictOnPrivateTargets(t *testing.T) {
+	t.Setenv("SECUREOPS_ALLOW_PRIVATE_TARGETS", "true")
+	cfg, err := LoadScanJob()
+	if err != nil {
+		t.Fatalf("LoadScanJob: %v", err)
+	}
+	if cfg.Scanners.AllowPrivateTargets {
+		t.Error("a scan job must stay strict on private targets")
+	}
+}
+
 // An adapter enforcing the address policy itself has to be given the setting,
 // and the default has to stay the strict one.
 func TestScannerSettingsCarryTheAddressPolicy(t *testing.T) {
