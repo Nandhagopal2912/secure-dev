@@ -130,12 +130,14 @@ func TestHTTPProbeThroughThePipeline(t *testing.T) {
 	pool := testPool(t)
 	client := testRedis(t)
 
-	// 0 misconfigured, 1 cannot tell, 2 fixed.
+	// 0 misconfigured, 1 cannot tell, 2 fixed, 3 route gone.
 	var state atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Set-Cookie", "session=NOTAREALTOKEN")
 		origin := r.Header.Get("Origin")
 		switch {
+		case state.Load() == 3 && origin != "":
+			w.WriteHeader(http.StatusNotFound)
 		case state.Load() == 1 && origin != "":
 			// A redirect off the site: the CORS check cannot reach a page.
 			w.Header().Set("Location", "https://elsewhere.example.test/")
@@ -192,6 +194,17 @@ func TestHTTPProbeThroughThePipeline(t *testing.T) {
 	}
 	if got := findingStates(t, pool, projectID); slices.Contains(got, "high/resolved") {
 		t.Errorf("after an incomplete scan = %v, the CORS finding must not be resolved", got)
+	}
+
+	// A route that has gone says nothing about whether the problem has (ADR 041).
+	state.Store(3)
+	gone := nextScan(t, pool, projectID)
+	runHTTPProbeScan(t, pool, client, gone, projectID, target)
+	if got := scanStatus(t, pool, gone); got != "partial" {
+		t.Errorf("scan of a missing route status = %q, want partial", got)
+	}
+	if got := findingStates(t, pool, projectID); slices.Contains(got, "high/resolved") {
+		t.Errorf("after a scan of a missing route = %v, the CORS finding must not be resolved", got)
 	}
 
 	// A clean scan of another page says nothing about this one (ADR 042).

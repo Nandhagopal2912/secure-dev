@@ -469,6 +469,110 @@ func TestRedirectLoopStopsAndDoesNotPass(t *testing.T) {
 	}
 }
 
+// A missing route or a service still waking up says nothing about the real page,
+// so no header on that response must not read as "this site trusts nobody".
+func TestErrorPagesWithNoHeaderAreNotAPass(t *testing.T) {
+	cases := []struct {
+		status   int
+		degraded bool
+	}{
+		{http.StatusOK, false},
+		{http.StatusBadRequest, false},
+		{http.StatusUnauthorized, false},
+		{http.StatusForbidden, false},
+		{http.StatusNotFound, true},
+		{http.StatusGone, true},
+		{http.StatusRequestTimeout, true},
+		{http.StatusTooEarly, true},
+		{http.StatusTooManyRequests, true},
+		{http.StatusInternalServerError, true},
+		{http.StatusBadGateway, true},
+		{http.StatusServiceUnavailable, true},
+		{http.StatusGatewayTimeout, true},
+	}
+	for _, tc := range cases {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			srv := httptest.NewServer(splitByOrigin(respond(tc.status, nil), respond(http.StatusOK, nil)))
+			defer srv.Close()
+
+			raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL+"/api/account"))
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+			if raw.Degraded() != tc.degraded {
+				t.Errorf("degradations = %v, want degraded=%v", raw.Degradations, tc.degraded)
+			}
+		})
+	}
+}
+
+// A header on an error page is still an answer: something chose to send it.
+func TestErrorPagesWithAHeaderStillCount(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			srv := httptest.NewServer(splitByOrigin(
+				func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					w.WriteHeader(status)
+				},
+				respond(http.StatusOK, nil),
+			))
+			defer srv.Close()
+
+			raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL+"/api/account"))
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+			if raw.Degraded() {
+				t.Errorf("degradations = %v, want none", raw.Degradations)
+			}
+			got, err := Normalize(raw.Output, "scan-1")
+			if err != nil {
+				t.Fatalf("Normalize: %v", err)
+			}
+			if !slices.ContainsFunc(got.Findings, func(f normalization.Finding) bool {
+				return f.Severity == normalization.SeverityHigh
+			}) {
+				t.Errorf("findings = %+v, want the reflected origin reported", got.Findings)
+			}
+		})
+	}
+}
+
+// A preflight refused with a 404 is a real answer from a framework with no OPTIONS
+// route. One that hits a service still waking up is not.
+func TestPreflightErrors(t *testing.T) {
+	cases := []struct {
+		status   int
+		degraded bool
+	}{
+		{http.StatusBadRequest, false},
+		{http.StatusNotFound, false},
+		{http.StatusServiceUnavailable, true},
+	}
+	for _, tc := range cases {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodOptions {
+					w.WriteHeader(tc.status)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+
+			raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL+"/api/account"))
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+			if raw.Degraded() != tc.degraded {
+				t.Errorf("degradations = %v, want degraded=%v", raw.Degradations, tc.degraded)
+			}
+		})
+	}
+}
+
 func TestNextHop(t *testing.T) {
 	cases := []struct {
 		name, start, location, want string
