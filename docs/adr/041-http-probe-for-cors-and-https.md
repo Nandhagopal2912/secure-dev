@@ -132,6 +132,12 @@ the adapter rather than in `scanners`, because the type allows it.
   absence proves nothing. A redirected preflight is different: a browser treats it as
   a refusal, so that is a real answer.
 - **A redirect with no usable `Location`, or a 3xx that moves nobody:** degraded.
+- **An error page with no CORS header:** degraded on a 404 or 410, which name nothing
+  to check, and on a 408, 425, 429 or 5xx, which mean the service could not answer. A
+  sleeping service or a bad deploy says nothing about what the real page would send. A
+  CORS header on an error page still counts, because something chose to send it. A
+  preflight's 404 is a real answer, from a framework with no OPTIONS route.
+  **What this cannot catch:** a holding page that answers 200 looks like a real page.
 
 A degraded result keeps its findings and stops a finding being resolved by a scan that
 could not tell, which `TestHTTPProbeThroughThePipeline` shows against a real database.

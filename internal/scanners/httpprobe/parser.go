@@ -139,11 +139,24 @@ func (c corsObservation) incomplete() bool {
 // describe the redirect, not the page it leads to. A preflight is the exception,
 // because a browser treats a redirected preflight as a refusal, so that answer
 // is a real "no" (ADR 041).
+//
+// So is an error page with no CORS header. A route that is not there, or a service
+// that is still waking up, says nothing about what the real page would send, and
+// the header's absence must not read as a refusal. A header that is present is
+// still an answer, because something chose to send it. A preflight may be refused
+// with a 404 by a framework that has no OPTIONS route, so only "not ready" counts
+// against one.
 func (p corsProbe) incomplete() bool {
 	if p.Failure != "" {
 		return true
 	}
-	return p.Kind != kindPreflight && isRedirect(p.Status) && p.AllowOrigin != allowOriginReflected
+	if p.Kind != kindPreflight && isRedirect(p.Status) && p.AllowOrigin != allowOriginReflected {
+		return true
+	}
+	if p.AllowOrigin != allowOriginAbsent {
+		return false
+	}
+	return isNotReady(p.Status) || (p.Kind != kindPreflight && isNotFound(p.Status))
 }
 
 // incomplete reports whether this check reached no conclusion.
@@ -165,6 +178,20 @@ func (r redirectObservation) incomplete() bool {
 }
 
 func isRedirect(status int) bool { return status >= 300 && status < 400 }
+
+// isNotFound reports whether the URL names nothing that could be checked.
+func isNotFound(status int) bool {
+	return status == http.StatusNotFound || status == http.StatusGone
+}
+
+// isNotReady reports whether the service could not answer properly right now.
+func isNotReady(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests:
+		return true
+	}
+	return status >= http.StatusInternalServerError
+}
 
 // isFollowableRedirect reports whether a browser would act on this status's
 // Location. 300, 304, and the rest do not move a visitor anywhere.
