@@ -143,7 +143,7 @@ function Hero() {
           </h1>
           <p className="mt-1.5 max-w-[58ch] text-[13px] leading-relaxed text-ink-muted">
             Turns fragmented security scanner output into one contextual security
-            decision. Six scanners across secrets, dependencies, code, containers,
+            decision. Seven scanners across secrets, dependencies, code, containers,
             infrastructure and running applications — reduced to one finding model,
             correlated, scored, and gated.
           </p>
