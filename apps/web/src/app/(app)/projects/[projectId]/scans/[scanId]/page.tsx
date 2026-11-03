@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getScan, getScanGate, optional, ApiError } from "@/lib/api";
+import { scanCoverageLabel } from "@/lib/scan-coverage";
 import { PageBody } from "@/components/shell/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ScanStatusBadge } from "@/components/security/status";
@@ -88,7 +89,7 @@ export default async function ScanDetail({
         <CardHeader>
           <CardTitle>Scanner coverage</CardTitle>
           <span className="text-[12px] text-ink-faint">
-            {scan.results?.length ?? 0} of {scan.requested_scanners?.length ?? 0} reported
+            {scanCoverageLabel(scan.results?.length ?? 0, scan.requested_scanners?.length ?? 0)}
           </span>
         </CardHeader>
         <CardContent>
