@@ -903,8 +903,9 @@ renaming the CVE ids makes the real two resurface, and pointing `paths` at
 another binary removes the suppression — so the exception is narrow in all three
 dimensions rather than a disabled scanner.
 
-*Revisit:* before image targets ship (Trivy adapter), which invalidates the
-reasoning above.
+*Revisit:* if grype is ever given an image target, which would invalidate the
+reasoning above. Image targets shipped without doing so: trivy serves them, and the
+grype adapter accepts filesystem targets only (re-reviewed 2026-11-03).
 
 ### T-34 Matched source stored as a finding · **Mitigated**
 
