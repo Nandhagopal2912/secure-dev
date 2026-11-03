@@ -7,6 +7,10 @@
 # control (CLAUDE.md §15.12), and this project does not have one of those.
 #
 # Approved by the project owner, 2026-09-01, per §24.
+#
+# Re-reviewed 2026-11-03: every remaining entry was checked and still has no fix
+# that applies. grype v0.121.1 still vendors docker/docker v28.5.2.
+# The new expiry is PROPOSED and stands only once the project owner approves it.
 
 vulnerabilities:
   # Both advisories are in github.com/docker/docker, vendored transitively by
@@ -28,8 +32,9 @@ vulnerabilities:
   # exposure requires a Docker daemon we do not run, recorded as accepted risk
   # in ADR 012 and threat model T-33 rather than hidden here.
   #
-  # Revisit before image targets ship (Trivy adapter, Phase 3b) -- that work
-  # gives grype a reason to talk to a daemon and invalidates the reasoning above.
+  # Image targets have shipped since this was written (ADR 025), and they did not
+  # invalidate the reasoning: trivy serves them, and the grype adapter still accepts
+  # filesystem targets only. Revisit if grype is ever given an image target.
   - id: CVE-2026-41567
     paths:
       - "usr/local/bin/grype"
@@ -37,7 +42,7 @@ vulnerabilities:
       Docker Engine API handler; no fixed version exists. The worker runs no
       Docker daemon and mounts no socket, and the grype adapter accepts
       filesystem targets only. Accepted risk, ADR 012 / T-33.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
 
   - id: CVE-2026-42306
     paths:
@@ -45,4 +50,4 @@ vulnerabilities:
     statement: >-
       Docker Engine API handler; no fixed version exists. Same reasoning and
       the same expiry as CVE-2026-41567. Accepted risk, ADR 012 / T-33.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01

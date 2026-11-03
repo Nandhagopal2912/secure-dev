@@ -15,6 +15,12 @@
 # An exception that never expires is a disabled control (CLAUDE.md §15.12).
 #
 # Approved by the project owner, 2026-09-01, per §24.
+#
+# Re-reviewed 2026-11-03: every remaining entry was checked and still has no fix
+# that applies. Docker: only a moby/moby/v2 beta has fixes, and grype
+# v0.121.1 still vendors docker/docker v28.5.2. Trivy: the GitHub advisory still
+# names only v0.69.4.
+# The new expiry is PROPOSED and stands only once the project owner approves it.
 
 advisories:
   # ---------------------------------------------------------------- trivy ---
@@ -47,7 +53,7 @@ advisories:
   - id: GO-2026-4919
     binary: trivy
     statement: Malicious v0.69.4 release only; we build v0.74.0 from a signed post-incident commit.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
 
   # ---------------------------------------------------------------- grype ---
   # Grype vendors github.com/docker/docker for image scanning. Every advisory
@@ -73,20 +79,20 @@ advisories:
   - id: GO-2026-5746
     binary: grype
     statement: Docker Engine API handler; no fix at any version; worker runs no daemon.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
   - id: GO-2026-5668
     binary: grype
     statement: Docker Engine API handler; no fix at any version; worker runs no daemon.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
   - id: GO-2026-5617
     binary: grype
     statement: Docker Engine API handler; no fix at any version; worker runs no daemon.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
   - id: GO-2026-4887
     binary: grype
     statement: Docker Engine API handler; no fix at any version; worker runs no daemon.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
   - id: GO-2026-4883
     binary: grype
     statement: Docker Engine API handler; no fix at any version; worker runs no daemon.
-    expired_at: 2026-12-01
+    expired_at: 2027-03-01
