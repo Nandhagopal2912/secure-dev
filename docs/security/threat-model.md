@@ -892,11 +892,11 @@ reported the unreachable call. So neither mode establishes runtime
 exploitability, and "present in the binary" remains the accurate description of
 what is known here.
 
-*Also accepted, in `.govulnignore.yaml`:* `GO-2026-5932`
-(`x/crypto/openpgp`, unmaintained, no fixed version) across all three scanner
-binaries, plus the same five Docker advisories under their Go ids. Same rules —
-per-binary, justified, expiring — with one addition: an entry that stops
-matching anything fails the build, so the list cannot rot.
+*Also accepted, in `.govulnignore.yaml`:* the same five Docker advisories under
+their Go ids. Same rules — per-binary, justified, expiring — with one addition:
+an entry that stops matching anything fails the build, so the list cannot rot.
+`GO-2026-5932` (`x/crypto/openpgp`) was accepted here until a fix appeared; the
+scanners now pin the commit that removes the package.
 
 *Verified by control test:* backdating `expired_at` makes the build fail again,
 renaming the CVE ids makes the real two resurface, and pointing `paths` at

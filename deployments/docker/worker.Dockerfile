@@ -63,8 +63,11 @@ ARG GITLEAKS_VERSION=8.30.1
 # GO-2026-6354 and GO-2026-6355 (CVE-2026-78662, CVE-2026-56855): two DoS
 # advisories in golang.org/x/crypto/ssh, both fixed in v0.56.0. Every scanner
 # below pulls x/crypto transitively, so every one is pinned past them.
-ARG X_CRYPTO_VERSION=v0.56.0
-ARG X_TEXT_VERSION=v0.41.0
+# GO-2026-5932 (x/crypto/openpgp) has no tagged release yet: this is the commit
+# the advisory names as its fix, which removes the package. Replace it with a
+# tag once one exists.
+ARG X_CRYPTO_VERSION=v0.58.1-0.20261009181718-2f1f834330b2
+ARG X_TEXT_VERSION=v0.43.0
 # Three archive-handling advisories that trivy does not report and govulncheck
 # does. All three are in code that parses attacker-supplied archives, which is
 # exactly the code path a secret scanner points at untrusted repositories.
@@ -101,17 +104,26 @@ RUN set -eux; \
 ARG SYFT_COMMIT=2293641e3bd628a01bb37639318d62c0ebe89b39
 ARG SYFT_VERSION=1.51.0
 # Carries the two x/mod advisories that survive a plain rebuild.
-ARG X_MOD_VERSION=v0.40.0
+ARG X_MOD_VERSION=v0.41.0
 # The same OpenTelemetry advisory already pinned out of grype. Fixed here too:
 # a fix applied to one scanner and not another is an accident waiting to be
 # rediscovered.
-ARG SYFT_OTEL_VERSION=v1.44.0
+# GO-2026-6505 needs the SDK at the same version.
+ARG SYFT_OTEL_VERSION=v1.45.0
 # CVE-2026-84304 (HIGH): gRPC-Go. Fixed in 1.83.1, and every scanner below
 # vendors an affected version -- syft and trivy at v1.82.1, grype at v1.83.0,
 # measured with `go version -m` on the built binaries rather than inferred.
 # Pinned per stage rather than globally: a fix applied to one scanner and not
 # another is an accident waiting to be rediscovered.
-ARG SYFT_GRPC_VERSION=v1.83.1
+# GO-2026-6443 (CVE-2026-84445) moved the floor to 1.83.2.
+ARG SYFT_GRPC_VERSION=v1.83.2
+# Advisories a plain rebuild leaves behind, found by govulncheck and trivy on the
+# built binaries. x/net: seven advisories, the last two fixed only in v0.62.0.
+# containerd: four, the last fixed in v2.3.6. Pinned per stage like gRPC above.
+ARG SYFT_X_NET_VERSION=v0.62.0
+ARG SYFT_CONTAINERD_VERSION=v2.3.6
+ARG SYFT_MOBY_USER_VERSION=v0.4.1
+ARG SYFT_JOSE_VERSION=v4.1.6
 
 RUN set -eux; \
     git clone --no-checkout https://github.com/anchore/syft /syft-src; \
@@ -121,7 +133,12 @@ RUN set -eux; \
     go get "golang.org/x/mod@${X_MOD_VERSION}" \
            "golang.org/x/crypto@${X_CRYPTO_VERSION}" \
            "go.opentelemetry.io/otel@${SYFT_OTEL_VERSION}" \
-           "google.golang.org/grpc@${SYFT_GRPC_VERSION}"; \
+           "go.opentelemetry.io/otel/sdk@${SYFT_OTEL_VERSION}" \
+           "google.golang.org/grpc@${SYFT_GRPC_VERSION}" \
+           "golang.org/x/net@${SYFT_X_NET_VERSION}" \
+           "github.com/containerd/containerd/v2@${SYFT_CONTAINERD_VERSION}" \
+           "github.com/moby/sys/user@${SYFT_MOBY_USER_VERSION}" \
+           "github.com/go-jose/go-jose/v4@${SYFT_JOSE_VERSION}"; \
     go mod tidy; \
     CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${SYFT_VERSION}" \
@@ -139,11 +156,16 @@ RUN set -eux; \
 ARG GRYPE_COMMIT=756eb9a24f7beeafb6871a24e943e8a3ae210695
 ARG GRYPE_VERSION=0.118.0
 # Carries the two x/mod advisories that survive a plain rebuild, same as syft.
-ARG GRYPE_X_MOD_VERSION=v0.40.0
+ARG GRYPE_X_MOD_VERSION=v0.41.0
 # And an OpenTelemetry advisory that a plain rebuild also leaves behind.
-ARG GRYPE_OTEL_VERSION=v1.44.0
+ARG GRYPE_OTEL_VERSION=v1.45.0
 # CVE-2026-84304, the same gRPC-Go advisory pinned out of syft above.
-ARG GRYPE_GRPC_VERSION=v1.83.1
+ARG GRYPE_GRPC_VERSION=v1.83.2
+# The same advisories pinned out of syft above.
+ARG GRYPE_X_NET_VERSION=v0.62.0
+ARG GRYPE_CONTAINERD_VERSION=v2.3.6
+ARG GRYPE_MOBY_USER_VERSION=v0.4.1
+ARG GRYPE_JOSE_VERSION=v4.1.6
 
 RUN set -eux; \
     git clone --no-checkout https://github.com/anchore/grype /grype-src; \
@@ -153,7 +175,12 @@ RUN set -eux; \
     go get "golang.org/x/mod@${GRYPE_X_MOD_VERSION}" \
            "golang.org/x/crypto@${X_CRYPTO_VERSION}" \
            "go.opentelemetry.io/otel@${GRYPE_OTEL_VERSION}" \
-           "google.golang.org/grpc@${GRYPE_GRPC_VERSION}"; \
+           "go.opentelemetry.io/otel/sdk@${GRYPE_OTEL_VERSION}" \
+           "google.golang.org/grpc@${GRYPE_GRPC_VERSION}" \
+           "golang.org/x/net@${GRYPE_X_NET_VERSION}" \
+           "github.com/containerd/containerd/v2@${GRYPE_CONTAINERD_VERSION}" \
+           "github.com/moby/sys/user@${GRYPE_MOBY_USER_VERSION}" \
+           "github.com/go-jose/go-jose/v4@${GRYPE_JOSE_VERSION}"; \
     go mod tidy; \
     CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${GRYPE_VERSION}" \
@@ -180,10 +207,16 @@ RUN apk add --no-cache git
 ARG TRIVY_COMMIT=e1fd17a0ea4a8cf24bc4b4dd7e2cfbf4bb31b994
 ARG TRIVY_VERSION=0.74.0
 # CVE-2026-84304, the same gRPC-Go advisory pinned out of syft and grype.
-ARG TRIVY_GRPC_VERSION=v1.83.1
+ARG TRIVY_GRPC_VERSION=v1.83.2
 # Redeclared rather than inherited: an ARG does not cross a FROM, and trivy
 # builds in its own stage. GO-2026-6354 / GO-2026-6355 as above.
-ARG TRIVY_X_CRYPTO_VERSION=v0.56.0
+ARG TRIVY_X_CRYPTO_VERSION=v0.58.1-0.20261009181718-2f1f834330b2
+# The same advisories pinned out of syft and grype. The exporters move with the
+# SDK, because trivy links them and GO-2026-6505 reports all three.
+ARG TRIVY_X_NET_VERSION=v0.62.0
+ARG TRIVY_CONTAINERD_VERSION=v2.3.6
+ARG TRIVY_OTEL_VERSION=v1.45.0
+ARG TRIVY_JOSE_VERSION=v4.1.6
 
 RUN set -eux; \
     # Shallow, at the tag, unlike the other scanners' full clones. Trivy's
@@ -201,7 +234,14 @@ RUN set -eux; \
     # trivy's pkg/x/json imports encoding/json/v2, which only exists under the
     # experiment, so `go mod tidy` without it fails to load the package.
     GOEXPERIMENT=jsonv2 go get "google.golang.org/grpc@${TRIVY_GRPC_VERSION}" \
-        "golang.org/x/crypto@${TRIVY_X_CRYPTO_VERSION}"; \
+        "golang.org/x/crypto@${TRIVY_X_CRYPTO_VERSION}" \
+        "golang.org/x/net@${TRIVY_X_NET_VERSION}" \
+        "github.com/containerd/containerd/v2@${TRIVY_CONTAINERD_VERSION}" \
+        "go.opentelemetry.io/otel@${TRIVY_OTEL_VERSION}" \
+        "go.opentelemetry.io/otel/sdk@${TRIVY_OTEL_VERSION}" \
+        "go.opentelemetry.io/otel/exporters/otlp/otlptrace@${TRIVY_OTEL_VERSION}" \
+        "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@${TRIVY_OTEL_VERSION}" \
+        "github.com/go-jose/go-jose/v4@${TRIVY_JOSE_VERSION}"; \
     GOEXPERIMENT=jsonv2 go mod tidy; \
     # GOEXPERIMENT=jsonv2 is not optional and not a tuning choice: trivy's
     # pkg/x/json calls into encoding/json/v2. This matches what trivy's own
@@ -328,9 +368,9 @@ RUN set -eux; \
 #
 # Pinned per architecture because the digest differs: the build resolves
 # TARGETARCH rather than trusting whichever wheel pip happens to pick.
-ARG SEMGREP_VERSION=1.174.0
-ARG SEMGREP_SHA256_AMD64=bbf20fdae8d6776a0afa3afe2aa20f07e8a24a86b3cd89b70b8b85a468e5dd24
-ARG SEMGREP_SHA256_ARM64=4f916a51f71e2ac37852830f8003af0d0c484c53ce480e6ec96c7a60d092d536
+ARG SEMGREP_VERSION=1.183.0
+ARG SEMGREP_SHA256_AMD64=204dce82a74be29cf6d84aa6a32b2244ff7429fafd3d77e0ea44996d0398ba4a
+ARG SEMGREP_SHA256_ARM64=a06b09d20c5595a31be210283b8ce50251305d49fb6e9214b50329a119779751
 ARG TARGETARCH
 
 # git is required to fetch repository targets (ADR 008). ca-certificates is
