@@ -51,6 +51,9 @@ const (
 	failureConnectTimeout = "connect_timeout"
 	failureTimeout        = "timeout"
 	failureNetwork        = "network"
+	// failureInvalidStatus means the target answered with a status no real page
+	// has. Recorded as no answer, so an odd code cannot make a check look finished.
+	failureInvalidStatus = "invalid_status"
 )
 
 // record is what the adapter stores: what it sent and what came back, reduced
@@ -140,23 +143,23 @@ func (c corsObservation) incomplete() bool {
 // because a browser treats a redirected preflight as a refusal, so that answer
 // is a real "no" (ADR 041).
 //
-// So is an error page with no CORS header. A route that is not there, or a service
-// that is still waking up, says nothing about what the real page would send, and
-// the header's absence must not read as a refusal. A header that is present is
-// still an answer, because something chose to send it. A preflight may be refused
-// with a 404 by a framework that has no OPTIONS route, so only "not ready" counts
-// against one.
+// So is an error page that did not echo the origin. A route that is not there, or a
+// service that is still waking up, says nothing about what the real page would send.
+// That includes a fixed header such as `*`, which a proxy may add to every response.
+// An echoed origin is still an answer, because something chose to send it. A
+// preflight may be refused for good with a 404 or 501 by a server with no OPTIONS
+// handler, so only "not ready" counts against one.
 func (p corsProbe) incomplete() bool {
 	if p.Failure != "" {
 		return true
 	}
-	if p.Kind != kindPreflight && isRedirect(p.Status) && p.AllowOrigin != allowOriginReflected {
-		return true
-	}
-	if p.AllowOrigin != allowOriginAbsent {
+	if p.AllowOrigin == allowOriginReflected {
 		return false
 	}
-	return isNotReady(p.Status) || (p.Kind != kindPreflight && isNotFound(p.Status))
+	if p.Kind == kindPreflight {
+		return isNotReady(p.Status) && p.Status != http.StatusNotImplemented
+	}
+	return isRedirect(p.Status) || isNotReady(p.Status) || isNotFound(p.Status)
 }
 
 // incomplete reports whether this check reached no conclusion.
@@ -167,6 +170,10 @@ func (p corsProbe) incomplete() bool {
 func (r redirectObservation) incomplete() bool {
 	if r.Failure != "" {
 		return r.Failure != failureRefused && r.Failure != failureFiltered
+	}
+	// A service that could not answer says nothing about whether it redirects.
+	if isNotReady(r.Status) {
+		return true
 	}
 	if !isRedirect(r.Status) {
 		return false
@@ -333,7 +340,7 @@ func (r redirectObservation) validate() error {
 func validFailure(f string) error {
 	switch f {
 	case failureBlocked, failureRefused, failureFiltered, failureDNS, failureTLS,
-		failureConnectTimeout, failureTimeout, failureNetwork:
+		failureConnectTimeout, failureTimeout, failureNetwork, failureInvalidStatus:
 		return nil
 	default:
 		return errors.New("unknown failure value")
@@ -341,3 +348,6 @@ func validFailure(f string) error {
 }
 
 func validStatus(status int) bool { return status >= 100 && status <= 599 }
+
+// isFinalStatus reports whether a live response is one either check can read.
+func isFinalStatus(status int) bool { return status >= 200 && status <= 599 }

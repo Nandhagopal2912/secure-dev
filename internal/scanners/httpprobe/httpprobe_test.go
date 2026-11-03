@@ -486,6 +486,7 @@ func TestErrorPagesWithNoHeaderAreNotAPass(t *testing.T) {
 		{http.StatusTooEarly, true},
 		{http.StatusTooManyRequests, true},
 		{http.StatusInternalServerError, true},
+		{http.StatusNotImplemented, true},
 		{http.StatusBadGateway, true},
 		{http.StatusServiceUnavailable, true},
 		{http.StatusGatewayTimeout, true},
@@ -540,8 +541,167 @@ func TestErrorPagesWithAHeaderStillCount(t *testing.T) {
 	}
 }
 
-// A preflight refused with a 404 is a real answer from a framework with no OPTIONS
-// route. One that hits a service still waking up is not.
+// A proxy can add a fixed header to every response, so `*` on an error page says
+// nothing about the real page.
+func TestWildcardOnAnErrorPageIsNotAnAnswer(t *testing.T) {
+	srv := httptest.NewServer(splitByOrigin(
+		respond(http.StatusServiceUnavailable, map[string]string{"Access-Control-Allow-Origin": "*"}),
+		respond(http.StatusOK, nil),
+	))
+	defer srv.Close()
+
+	raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL+"/api/account"))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if !raw.Degraded() {
+		t.Error("a wildcard on an error page must not read as a finished check")
+	}
+}
+
+// A preflight that trusts any origin is the weaker evidence, so it must not hide a
+// real request that trusts a lookalike with cookies.
+func TestPreflightTrustDoesNotHideAWorseFinding(t *testing.T) {
+	srv := httptest.NewServer(splitByOrigin(
+		func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			switch {
+			case r.Method == http.MethodOptions:
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			case strings.HasPrefix(origin, "https://127.0.0.1."):
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+			w.WriteHeader(http.StatusOK)
+		},
+		redirectTo(http.StatusMovedPermanently, "https://example.test/"),
+	))
+	defer srv.Close()
+
+	raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	want := []string{"cors-lookalike-origin-credentials", "cors-reflected-origin"}
+	if got := ruleIDs(t, raw); !slices.Equal(got, want) {
+		t.Errorf("rules = %v, want %v", got, want)
+	}
+}
+
+// A browser accepts only the exact value, so anything else is not a credentials
+// problem, however close it looks.
+func TestCredentialsHeaderMustBeExact(t *testing.T) {
+	srv := httptest.NewServer(splitByOrigin(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+			w.Header().Set("Access-Control-Allow-Credentials", "TRUE")
+			w.WriteHeader(http.StatusOK)
+		},
+		redirectTo(http.StatusMovedPermanently, "https://example.test/"),
+	))
+	defer srv.Close()
+
+	raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if got := ruleIDs(t, raw); !slices.Equal(got, []string{"cors-reflected-origin"}) {
+		t.Errorf("rules = %v, want cors-reflected-origin", got)
+	}
+}
+
+// A plain port that could not answer says nothing about whether it redirects, so it
+// neither opens a finding nor lets one close. A 404 is an answer: nothing redirected.
+func TestPlainPortThatIsNotReady(t *testing.T) {
+	cases := []struct {
+		status   int
+		degraded bool
+		want     []string
+	}{
+		{http.StatusTooManyRequests, true, []string{}},
+		{http.StatusInternalServerError, true, []string{}},
+		{http.StatusServiceUnavailable, true, []string{}},
+		{http.StatusNotFound, false, []string{"http-error-plain"}},
+		{http.StatusForbidden, false, []string{"http-error-plain"}},
+	}
+	for _, tc := range cases {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			plain := httptest.NewServer(respond(tc.status, nil))
+			defer plain.Close()
+			_, plainPort, _ := net.SplitHostPort(strings.TrimPrefix(plain.URL, "http://"))
+
+			srv := httptest.NewTLSServer(respond(http.StatusOK, nil))
+			defer srv.Close()
+
+			raw, err := tlsScanner(srv, plainPort).Scan(context.Background(), endpointTarget(srv.URL))
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+			if raw.Degraded() != tc.degraded {
+				t.Errorf("degradations = %v, want degraded=%v", raw.Degradations, tc.degraded)
+			}
+			if got := ruleIDs(t, raw); !slices.Equal(got, tc.want) {
+				t.Errorf("rules = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A status no real page has must not drop a finding quietly while the scan still
+// counts as finished, because that scan could then close the finding.
+func TestStatusesOutsideTheRangeAreNotAnswers(t *testing.T) {
+	const oddStatus = 999
+	reflecting := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.WriteHeader(oddStatus)
+	}
+	permanent := redirectTo(http.StatusMovedPermanently, "https://example.test/")
+
+	t.Run("on the CORS check", func(t *testing.T) {
+		srv := httptest.NewServer(splitByOrigin(reflecting, permanent))
+		defer srv.Close()
+
+		raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL))
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		if !raw.Degraded() {
+			t.Error("must not read as a finished check")
+		}
+		if got := ruleIDs(t, raw); len(got) != 0 {
+			t.Errorf("rules = %v, want none", got)
+		}
+	})
+
+	t.Run("on the plain check", func(t *testing.T) {
+		srv := httptest.NewServer(splitByOrigin(respond(http.StatusOK, nil), respond(oddStatus, nil)))
+		defer srv.Close()
+
+		raw, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL))
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		if !raw.Degraded() {
+			t.Error("must not read as a finished check")
+		}
+		if got := ruleIDs(t, raw); len(got) != 0 {
+			t.Errorf("rules = %v, want none", got)
+		}
+	})
+
+	t.Run("on both", func(t *testing.T) {
+		srv := httptest.NewServer(respond(oddStatus, nil))
+		defer srv.Close()
+
+		if _, err := testScanner().Scan(context.Background(), endpointTarget(srv.URL)); !errors.Is(err, ErrUnreachable) {
+			t.Errorf("err = %v, want ErrUnreachable", err)
+		}
+	})
+}
+
+// A preflight refused with a 404 or 501 is a real answer from a server with no
+// OPTIONS handler. One that hits a service still waking up is not.
 func TestPreflightErrors(t *testing.T) {
 	cases := []struct {
 		status   int
@@ -549,6 +709,7 @@ func TestPreflightErrors(t *testing.T) {
 	}{
 		{http.StatusBadRequest, false},
 		{http.StatusNotFound, false},
+		{http.StatusNotImplemented, false},
 		{http.StatusServiceUnavailable, true},
 	}
 	for _, tc := range cases {

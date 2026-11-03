@@ -10,7 +10,9 @@
 # a supply-chain dependency that runs against attacker-controlled input, so
 # "latest" is not acceptable (threat model T-10).
 
-FROM golang:1.27-alpine AS build
+# Named down to the patch version: go.mod requires 1.27.3, this image sets
+# GOTOOLCHAIN=local, and a cached older 1.27 image would fail the build.
+FROM golang:1.27.3-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -52,7 +54,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # The source is pinned to an immutable commit SHA, not a tag. Tags are mutable,
 # so a SHA is a stronger guarantee than the publisher checksum this replaces.
 
-FROM golang:1.27-alpine AS tools
+FROM golang:1.27.3-alpine AS tools
 RUN apk add --no-cache git
 
 # v8.30.1

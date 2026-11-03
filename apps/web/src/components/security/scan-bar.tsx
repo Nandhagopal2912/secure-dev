@@ -55,10 +55,11 @@ const COPY: Record<ScanMode, Copy> = {
     invalid: "Enter an https URL.",
     help: (
       <>
-        Passive testing only — SecureOps crawls the site and reports what its
-        passive rules see. It sends no attack payloads, so it does not test for
-        injection, and it signs in to nothing. Scan only what you are authorised
-        to test.
+        No attack testing — SecureOps crawls the site and reports what its passive
+        rules see, then checks how the URL answers cross-origin requests and
+        whether plain HTTP redirects to HTTPS. It sends no attack payloads, so it
+        does not test for injection, and it signs in to nothing. Scan only what
+        you are authorised to test.
       </>
     ),
   },

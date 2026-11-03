@@ -329,6 +329,11 @@ Compose v5.4.0 · Git 2.50.1 · golangci-lint 2.13.1 · gitleaks 8.30.1 · syft 
 grype 0.117.0 · trivy 0.74.0 · semgrep 1.174.0 · kubectl 1.36.1 · helm v4.2.4 ·
 psql 17.11 · redis-cli 8.10.1 · gh 2.98.0
 
+That list is what was last verified by hand, and the repository now needs more:
+`go.mod` requires Go 1.27.3, the Dockerfiles name `golang:1.27.3-alpine`, and CI uses
+semgrep 1.183.0. `make lint-go` needs golangci-lint 2.14.0 or later: 2.13.x cannot read
+Go 1.27.3's export data, and reports `typecheck` errors on clean code.
+
 OWASP ZAP 2.17.0 is installed locally but is **not on PATH** — on macOS it lives
 inside `/Applications/ZAP.app`, so the adapter takes a configurable launcher path
 (`SECUREOPS_ZAP_COMMAND`) and is skipped by tests when it is unset.

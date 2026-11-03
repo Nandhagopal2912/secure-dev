@@ -28,9 +28,10 @@ alongside ZAP and sends at most eight requests per scan (sections 2 and 3), none
 them carrying a payload.
 
 Beyond its own folder and fixtures it adds one registration in
-`internal/scanners/all`, and one setting in `config.ScannerSettings` (section 5).
-The setting goes past §7 rule 4 on purpose and with the owner's approval, because
-this is the first adapter that makes its own connections and so enforces the
+`internal/scanners/all`, one setting in `config.ScannerSettings` (section 5), and one
+row in the dashboard's hand-kept scanner list (`scan-progress.tsx`). The setting and
+the row go past §7 rule 4, so **they need the owner's approval**. The setting is there
+because this is the first adapter that makes its own connections and so enforces the
 address policy itself.
 
 ### 1. Why this stays inside ADR 026
@@ -70,10 +71,12 @@ equal to what was sent.
 | Trusts a lookalike | **High**, `cors-lookalike-origin-credentials` | **Low**, `cors-lookalike-origin` | The same reasoning. |
 | Trusts `null` | **High**, `cors-null-origin-credentials` | **Low**, `cors-null-origin` | The same reasoning. |
 
-- **One mistake is one finding.** A server that trusts any origin also trusts a
-  lookalike and `null`, so only the first is reported for it.
+- **One mistake is one finding.** A server that trusts any origin on a real request
+  also trusts a lookalike and `null`, so only the first is reported for it.
 - **A yes on the preflight alone has medium confidence,** and shares the same rule. A
-  preflight says the request may be sent, not that its answer may be read.
+  preflight says the request may be sent, not that its answer may be read. So it does
+  not stop the lookalike and `null` questions from reporting, which may be worse.
+- **Credentials mean the exact value `true`.** A browser accepts nothing else.
 - **`*` is not reported.** ZAP's rule 10098 already does, in the `pscanrules` add-on
   the worker image installs, and browsers refuse credentials with `*`. It is recorded
   in the output, as are a fixed `null` and any other fixed value.
@@ -94,7 +97,8 @@ finding from that case is reported with low confidence.
 | 302, 303, or 307 to `https:` | **Low**, `http-redirect-temporary` | It does upgrade, but browsers keep returning to the plain address first. |
 | Redirect to `http:` or a relative path | **Low**, low confidence, `http-redirect-stays-plain` | A later hop may reach HTTPS. This check follows no redirects, so that cannot be known. |
 | 2xx | **Medium**, `http-served-plain` | A page is readable and changeable on the network path. |
-| 4xx or 5xx | **Low**, low confidence, `http-error-plain` | Something is listening, but nothing shows it serves real content. |
+| 408, 425, 429, or 5xx | no finding, and the result is degraded | The service could not answer, which is no evidence either way. |
+| Any other 4xx | **Low**, low confidence, `http-error-plain` | Something is listening, but nothing shows it serves real content. |
 | Connection refused, HTTPS target | no finding | Nothing is listening, which is safer than any redirect. |
 | Connection times out, HTTPS target that just answered | **Info**, low confidence, `http-port-unverified` | See below. |
 
@@ -132,12 +136,18 @@ the adapter rather than in `scanners`, because the type allows it.
   absence proves nothing. A redirected preflight is different: a browser treats it as
   a refusal, so that is a real answer.
 - **A redirect with no usable `Location`, or a 3xx that moves nobody:** degraded.
-- **An error page with no CORS header:** degraded on a 404 or 410, which name nothing
-  to check, and on a 408, 425, 429 or 5xx, which mean the service could not answer. A
-  sleeping service or a bad deploy says nothing about what the real page would send. A
-  CORS header on an error page still counts, because something chose to send it. A
-  preflight's 404 is a real answer, from a framework with no OPTIONS route.
-  **What this cannot catch:** a holding page that answers 200 looks like a real page.
+- **An error page that did not echo the origin:** degraded on a 404 or 410, which name
+  nothing to check, and on a 408, 425, 429 or 5xx, which mean the service could not
+  answer. A sleeping service or a bad deploy says nothing about what the real page would
+  send, and neither does a fixed `*` that a proxy adds to every response. An echoed
+  origin still counts, because something chose to send it. A preflight's 404 or 501 is a
+  real answer, from a server with no OPTIONS handler.
+  **What this cannot catch:** a holding page that answers 200 looks like a real page, and
+  a 401 or 403 still reads as an answer, although login checks often run before CORS
+  handling. Treating those as inconclusive would make protected routes `PARTIAL` on every
+  scan, so that trade is the owner's to decide.
+- **A status outside 200-599:** recorded as no answer, so it cannot drop a finding while
+  the scan still counts as finished.
 
 A degraded result keeps its findings and stops a finding being resolved by a scan that
 could not tell, which `TestHTTPProbeThroughThePipeline` shows against a real database.
@@ -243,8 +253,10 @@ whether an endpoint's plain address is safe, and do so on the sites where a redi
 a firewall would otherwise have left it silent.
 
 **What becomes harder.** An endpoint scan has one more scanner that can make it `PARTIAL`,
-though for a stated reason: a real network failure, a broken certificate, or a redirect to
-another site. Each can be resolved by fixing it or by scanning the final URL.
+though for a stated reason: a real network failure, a broken certificate, a redirect to
+another site, an error page at the target, or a service that is not ready. Each can be resolved
+by fixing it, by scanning the final URL, or by waking the service first. ZAP also fails when its
+starting URL returns 404, so scanning such a URL ends as `FAILED`, because nothing fully succeeded.
 
 **What is not solved, stated plainly:**
 
