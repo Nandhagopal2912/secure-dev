@@ -48,12 +48,6 @@ advisories:
     binary: trivy
     statement: Malicious v0.69.4 release only; we build v0.74.0 from a signed post-incident commit.
     expired_at: 2026-12-01
-  # The same unmaintained x/crypto/openpgp package the other three binaries
-  # carry, with no fixed version anywhere.
-  - id: GO-2026-5932
-    binary: trivy
-    statement: x/crypto/openpgp is unmaintained; no fixed version exists.
-    expired_at: 2026-12-01
 
   # ---------------------------------------------------------------- grype ---
   # Grype vendors github.com/docker/docker for image scanning. Every advisory
@@ -95,42 +89,4 @@ advisories:
   - id: GO-2026-4883
     binary: grype
     statement: Docker Engine API handler; no fix at any version; worker runs no daemon.
-    expired_at: 2026-12-01
-
-  # ------------------------------------------------ every scanner binary ---
-  # golang.org/x/crypto/openpgp: the package is unmaintained and there is no
-  # fixed version, so this cannot be pinned away. It reaches all three scanner
-  # binaries through their shared archive and signature handling, and trivy
-  # reports none of them.
-  #
-  # Listed once per binary rather than once globally. Repetitive on purpose:
-  # a per-binary entry means removing a scanner removes its acceptance, and
-  # nobody has to reason about which binaries a global entry silently covers.
-  #
-  # Everything else govulncheck found in these binaries was FIXED rather than
-  # accepted -- four advisories trivy did not report at all:
-  #   gitleaks  GO-2025-3922, GO-2025-4020  (mholt/archives v0.1.5)
-  #   gitleaks  GO-2026-5841                (klauspost/compress v1.18.7)
-  #   syft      GO-2026-5158                (opentelemetry-go v1.44.0)
-  - id: GO-2026-5932
-    binary: gitleaks
-    statement: >-
-      x/crypto/openpgp is unmaintained with no fixed version. Reached through
-      archive and signature handling; gitleaks reads repository content and
-      does not verify OpenPGP signatures as part of a scan.
-    expired_at: 2026-12-01
-  - id: GO-2026-5932
-    binary: syft
-    statement: >-
-      x/crypto/openpgp is unmaintained with no fixed version. Reached through
-      package-catalog signature handling, which the SBOM path does not
-      exercise.
-    expired_at: 2026-12-01
-  - id: GO-2026-5932
-    binary: grype
-    statement: >-
-      x/crypto/openpgp is unmaintained with no fixed version. Reached through
-      grype's own signature and archive handling; scans are local filesystem
-      reads and the database is fetched over HTTPS by the standard library,
-      not this package.
     expired_at: 2026-12-01
