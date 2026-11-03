@@ -4,7 +4,9 @@
 # image deliberately contains no scanner binaries, no shell tooling, and no
 # package managers (CLAUDE.md §14.1).
 
-FROM golang:1.27-alpine AS build
+# Named down to the patch version: go.mod requires 1.27.3, this image sets
+# GOTOOLCHAIN=local, and a cached older 1.27 image would fail the build.
+FROM golang:1.27.3-alpine AS build
 WORKDIR /src
 
 # Cache dependency download separately from the source layer.

@@ -236,10 +236,14 @@ func (s *Scanner) ask(
 		probe.Failure = classifyFailure(err)
 		return probe, ""
 	}
+	if !isFinalStatus(status) {
+		probe.Failure = failureInvalidStatus
+		return probe, ""
+	}
 	probe.Status = status
 	probe.AllowOrigin = classifyAllowOrigin(header.Get("Access-Control-Allow-Origin"), origin)
-	probe.AllowCredentials = strings.EqualFold(
-		strings.TrimSpace(header.Get("Access-Control-Allow-Credentials")), "true")
+	// Exact, because a browser accepts nothing else.
+	probe.AllowCredentials = strings.TrimSpace(header.Get("Access-Control-Allow-Credentials")) == "true"
 	return probe, header.Get("Location")
 }
 
@@ -309,6 +313,10 @@ func (s *Scanner) checkRedirect(
 			// is reported as a note rather than as a pass (ADR 041).
 			obs.Failure = failureFiltered
 		}
+		return obs
+	}
+	if !isFinalStatus(status) {
+		obs.Failure = failureInvalidStatus
 		return obs
 	}
 	obs.Status = status

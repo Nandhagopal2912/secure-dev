@@ -186,8 +186,10 @@ func Normalize(data []byte, scanID string) (normalization.Result, error) {
 
 // corsFindings decides what the CORS observation means.
 //
-// A server that trusts any origin also trusts a lookalike and null, and that is
-// one mistake rather than three, so nothing further is reported for it.
+// A server that trusts any origin on a real request also trusts a lookalike and
+// null, and that is one mistake rather than three, so nothing further is reported
+// for it. A preflight alone proves less, so it does not stop the other questions
+// from reporting, which may be worse.
 //
 // `*` is deliberately not reported. ZAP's passive rule 10098 already does, and
 // browsers refuse to send credentials to it (ADR 041).
@@ -197,6 +199,7 @@ func corsFindings(c corsObservation) []rule {
 
 	baseTrusts := base.AllowOrigin == allowOriginReflected
 	preflightTrusts := preflight.AllowOrigin == allowOriginReflected
+	var out []rule
 	if baseTrusts || preflightTrusts {
 		credentials := (baseTrusts && base.AllowCredentials) || (preflightTrusts && preflight.AllowCredentials)
 		r := ruleReflected
@@ -208,10 +211,12 @@ func corsFindings(c corsObservation) []rule {
 		if !baseTrusts {
 			r.confidence = normalization.ConfidenceMedium
 		}
-		return []rule{r}
+		out = append(out, r)
+	}
+	if baseTrusts {
+		return out
 	}
 
-	var out []rule
 	if lookalike, ok := c.probe(kindLookalikeOrigin); ok && lookalike.AllowOrigin == allowOriginReflected {
 		if lookalike.AllowCredentials {
 			out = append(out, ruleLookalikeWithCredentials)
@@ -235,6 +240,8 @@ func redirectFinding(r redirectObservation) (rule, bool) {
 	case r.Failure == failureFiltered:
 		return rulePortUnverified, true
 	case r.Failure != "":
+		return rule{}, false
+	case isNotReady(r.Status):
 		return rule{}, false
 	case r.Status >= 400:
 		return rulePlainError, true
